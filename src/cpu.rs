@@ -9,65 +9,52 @@ pub enum ProgramCounter {
 
 #[derive(Debug)]
 pub enum Operand {
-    Addr(usize),
+    Direct(u16),
+    Indirect(Register),
     Byte(u8),
+    Word(u16),
     Register(Register),
 }
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
 pub enum Register {
-    V(usize),
-    I,
-    Dt,
-    St,
-    Pc,
-    Sp,
+    A,
+    B,
+    C,
+    D,
+    E,
+    F, // Holds CPU Flags
+    H,
+    L,
+    AF,
+    BC,
+    DE,
+    HL,
+    SP,
 }
 
 #[derive(Debug)]
 pub enum Op {
-    CLS,                    // Clear
-    RET,                    // Return
-    JP(usize),              // Jump
-    JPREG(Operand, usize),  // Jump
-    CALL(usize),
-    SE(Register, Operand),  // Skip next if eq
-    SNE(Register, Operand), // Skip next if not eq
+    NOP,
     LD(Operand, Operand),
-
-    ADD(Register, Operand),
-    OR(Register, Operand),
-    AND(Register, Operand),
-    XOR(Register, Operand),
-    SUB(Register, Operand),
-    SHR(Register, Operand),
-    SUBN(Register, Operand),
-    SHL(Register, Operand),
-    RND(Register, u8),
-
-    DRAW(Register, Register, usize),
-    SKP(Operand),
-    SKNP(Operand),
-
-    SKIPKEY(Register),
-    SKIPNOKEY(Register),
-    WAITKEY(Register),
-    SPRITECHAR(Register),
-    MOVBCD(Register),
-    READM(Register),
-    WRITEM(Register),
 }
-
-
 pub struct Cpu {
     mmu: Mmu,
     // general purpose registers
     v: [u8; 16],
-
+    a: u8,
+    b: u8,
+    c: u8,
+    d: u8,
+    e: u8,
+    f: u8,
+    h: u8,
+    l: u8,
     // address store register
     i: usize,
 
     stack: [usize; 16],
+    // TODO: Make pc private
     pub pc: usize,
     sp: usize,
 }
@@ -75,130 +62,357 @@ pub struct Cpu {
 impl Cpu {
     pub fn new(mmu: Mmu) -> Cpu {
         Cpu {
+            a: 0,
+            b: 0,
+            c: 0,
+            d: 0,
+            e: 0,
+            f: 0,
+            h: 0,
+            l: 0,
             mmu,
             v: [0u8; 16],
             i: 0,
             stack: [0usize; 16],
-            pc: 0x200,
+            pc: 0,
             sp: 0,
         }
     }
 
+    pub fn hl(&self) -> usize {
+        (((self.h as u16) << 8) + self.l as u16) as usize
+    }
+
+    pub fn write_hl(&mut self, value: u16) {
+        self.l = (value & 0x0F) as u8;
+        self.h = ((value & 0xF0) >> 8) as u8;
+    }
+
     pub fn read_instruction(&mut self) -> Result<Op, GBError> {
-        let op = self.mmu.read_word(self.pc)?;
-        let nibbles = (
-            (op & 0xF000) >> 12,
-            (op & 0x0F00) >> 8,
-            (op & 0x00F0) >> 4,
-            op & 0x000F,
-        );
-        let nnn: usize = (op & 0x0FFF) as usize;
-        let kk = (op & 0x00FF) as u8;
-        let x = nibbles.1 as usize;
-        let y = nibbles.2 as usize;
-        let n = nibbles.3 as usize;
+        let op = self.mmu.byte(self.pc)?;
 
-        match nibbles {
-            (0x0, 0x0, 0xE, 0x0) => Ok(Op::CLS),
-            (0x0, 0x0, 0xE, 0xE) => Ok(Op::RET),
-            (0x1, _, _, _) => Ok(Op::JP(nnn)),
-            (0x2, _, _, _) => Ok(Op::CALL(nnn)),
-            (0x3, _, _, _) => Ok(Op::SE(Register::V(x), Operand::Byte(kk))),
-            (0x4, _, _, _) => Ok(Op::SNE(Register::V(x), Operand::Byte(kk))),
-            (0x5, _, _, 0x0) => Ok(Op::SE(Register::V(x), Operand::Register(Register::V(y)))),
-            (0x6, _, _, _) => Ok(Op::LD(Operand::Register(Register::V(x)), Operand::Byte(kk))),
-            (0x7, _, _, _) => Ok(Op::ADD(Register::V(x), Operand::Byte(kk))),
+        match op {
+            0x00 => Ok(Op::NOP),
+            0x01 => {
+                let value = self.mmu.word(self.pc)?;
+                Ok(Op::LD(
+                    Operand::Register(Register::BC),
+                    Operand::Word(value),
+                ))
+            }
 
-            (0x8, _, _, 0x0) => Ok(Op::LD(Operand::Register(Register::V(x)), Operand::Register(Register::V(y)))),
-            (0x8, _, _, 0x1) => Ok(Op::OR(Register::V(x), Operand::Register(Register::V(y)))),
-            (0x8, _, _, 0x2) => Ok(Op::AND(Register::V(x), Operand::Register(Register::V(y)))),
-            (0x8, _, _, 0x3) => Ok(Op::XOR(Register::V(x), Operand::Register(Register::V(y)))),
-            (0x8, _, _, 0x4) => Ok(Op::ADD(Register::V(x), Operand::Register(Register::V(y)))),
-            (0x8, _, _, 0x5) => Ok(Op::SUB(Register::V(x), Operand::Register(Register::V(y)))),
-            (0x8, _, _, 0x6) => Ok(Op::SHR(Register::V(x), Operand::Register(Register::V(y)))),
-            (0x8, _, _, 0x7) => Ok(Op::SUBN(Register::V(x), Operand::Register(Register::V(y)))),
-            (0x8, _, _, 0xE) => Ok(Op::SHL(Register::V(x), Operand::Register(Register::V(y)))),
+            0x06 => {
+                let value = self.mmu.byte(self.pc)?;
+                Ok(Op::LD(Operand::Register(Register::B), Operand::Byte(value)))
+            }
 
-            (0x9, _, _, 0x0) => Ok(Op::SNE(Register::V(x), Operand::Register(Register::V(y)))),
-            (0xA, _, _, _) => Ok(Op::LD(Operand::Register(Register::I), Operand::Addr(nnn))),
-            (0xB, _, _, _) => Ok(Op::JPREG(Operand::Register(Register::V(0)), nnn)),
-            (0xC, _, _, _) => Ok(Op::RND(Register::V(x), kk)),
-            (0xD, _, _, _) => Ok(Op::DRAW(Register::V(x), Register::V(y), n)),
+            0x0E => {
+                let value = self.mmu.byte(self.pc)?;
+                Ok(Op::LD(Operand::Register(Register::C), Operand::Byte(value)))
+            }
 
-            (0xE, _, 0x9, 0xE) => Ok(Op::SKIPKEY(Register::V(x))),
-            (0xE, _, 0xA, 0x1) => Ok(Op::SKIPNOKEY(Register::V(x))),
+            0x16 => {
+                let value = self.mmu.byte(self.pc)?;
+                Ok(Op::LD(Operand::Register(Register::D), Operand::Byte(value)))
+            }
 
-            (0xF, _, _, 0x7) => Ok(Op::LD(Operand::Register(Register::V(x)), Operand::Register(Register::Dt))),
-            (0xF, _, _, 0xA) => Ok(Op::WAITKEY(Register::V(x))),
-            (0xF, _, 0x1, 0x5) => Ok(Op::LD(Operand::Register(Register::Dt), Operand::Register(Register::V(x)))),
-            (0xF, _, 0x1, 0x8) => Ok(Op::LD(Operand::Register(Register::St), Operand::Register(Register::V(x)))),
-            (0xF, _, 0x1, 0xE) => Ok(Op::ADD(Register::I, Operand::Register(Register::V(x)))),
-            (0xF, _, 0x2, 0x9) => Ok(Op::SPRITECHAR(Register::V(x))),
-            (0xF, _, 0x3, 0x3) => Ok(Op::MOVBCD(Register::V(x))),
-            (0xF, _, 0x5, 0x5) => Ok(Op::READM(Register::V(x))),
-            (0xF, _, 0x6, 0x5) => Ok(Op::WRITEM(Register::V(x))),
-            _ => Err(GBError::UnknownOperation(op))
+            0x1E => {
+                let value = self.mmu.byte(self.pc)?;
+                Ok(Op::LD(Operand::Register(Register::E), Operand::Byte(value)))
+            }
+
+            0x26 => {
+                let value = self.mmu.byte(self.pc)?;
+                Ok(Op::LD(Operand::Register(Register::H), Operand::Byte(value)))
+            }
+
+            0x2E => {
+                let value = self.mmu.byte(self.pc)?;
+                Ok(Op::LD(Operand::Register(Register::L), Operand::Byte(value)))
+            }
+
+            // LD A, x
+            0x7F => Ok(Op::LD(
+                Operand::Register(Register::A),
+                Operand::Register(Register::A),
+            )),
+            0x78 => Ok(Op::LD(
+                Operand::Register(Register::A),
+                Operand::Register(Register::B),
+            )),
+            0x79 => Ok(Op::LD(
+                Operand::Register(Register::A),
+                Operand::Register(Register::C),
+            )),
+            0x7A => Ok(Op::LD(
+                Operand::Register(Register::A),
+                Operand::Register(Register::D),
+            )),
+            0x7B => Ok(Op::LD(
+                Operand::Register(Register::A),
+                Operand::Register(Register::E),
+            )),
+            0x7C => Ok(Op::LD(
+                Operand::Register(Register::A),
+                Operand::Register(Register::H),
+            )),
+            0x7D => Ok(Op::LD(
+                Operand::Register(Register::A),
+                Operand::Register(Register::L),
+            )),
+            0x7E => {
+                let value = self.mmu.word(self.hl() as usize)?;
+                Ok(Op::LD(Operand::Register(Register::A), Operand::Word(value)))
+            }
+
+            // LD B, x
+            0x40 => Ok(Op::LD(
+                Operand::Register(Register::B),
+                Operand::Register(Register::B),
+            )),
+
+            0x41 => Ok(Op::LD(
+                Operand::Register(Register::B),
+                Operand::Register(Register::C),
+            )),
+
+            0x42 => Ok(Op::LD(
+                Operand::Register(Register::B),
+                Operand::Register(Register::D),
+            )),
+
+            0x43 => Ok(Op::LD(
+                Operand::Register(Register::B),
+                Operand::Register(Register::E),
+            )),
+
+            0x44 => Ok(Op::LD(
+                Operand::Register(Register::B),
+                Operand::Register(Register::H),
+            )),
+
+            0x45 => Ok(Op::LD(
+                Operand::Register(Register::B),
+                Operand::Register(Register::L),
+            )),
+
+            0x46 => {
+                let value = self.mmu.word(self.hl() as usize)?;
+                Ok(Op::LD(Operand::Register(Register::B), Operand::Word(value)))
+            }
+
+            // LD C, x
+            0x48 => Ok(Op::LD(
+                Operand::Register(Register::C),
+                Operand::Register(Register::B),
+            )),
+            0x49 => Ok(Op::LD(
+                Operand::Register(Register::C),
+                Operand::Register(Register::C),
+            )),
+            0x4A => Ok(Op::LD(
+                Operand::Register(Register::C),
+                Operand::Register(Register::D),
+            )),
+            0x4B => Ok(Op::LD(
+                Operand::Register(Register::C),
+                Operand::Register(Register::E),
+            )),
+            0x4C => Ok(Op::LD(
+                Operand::Register(Register::C),
+                Operand::Register(Register::H),
+            )),
+            0x4D => Ok(Op::LD(
+                Operand::Register(Register::C),
+                Operand::Register(Register::L),
+            )),
+            0x4E => {
+                let value = self.mmu.word(self.hl() as usize)?;
+                Ok(Op::LD(Operand::Register(Register::C), Operand::Word(value)))
+            }
+
+            // LD D, x
+            0x50 => Ok(Op::LD(
+                Operand::Register(Register::D),
+                Operand::Register(Register::B),
+            )),
+
+            0x51 => Ok(Op::LD(
+                Operand::Register(Register::D),
+                Operand::Register(Register::C),
+            )),
+
+            0x52 => Ok(Op::LD(
+                Operand::Register(Register::D),
+                Operand::Register(Register::D),
+            )),
+
+            0x53 => Ok(Op::LD(
+                Operand::Register(Register::D),
+                Operand::Register(Register::E),
+            )),
+
+            0x54 => Ok(Op::LD(
+                Operand::Register(Register::D),
+                Operand::Register(Register::H),
+            )),
+
+            0x55 => Ok(Op::LD(
+                Operand::Register(Register::D),
+                Operand::Register(Register::L),
+            )),
+
+            0x56 => {
+                let value = self.mmu.word(self.hl() as usize)?;
+                Ok(Op::LD(Operand::Register(Register::D), Operand::Word(value)))
+            }
+
+            // LD E, x
+            0x58 => Ok(Op::LD(
+                Operand::Register(Register::E),
+                Operand::Register(Register::B),
+            )),
+            0x59 => Ok(Op::LD(
+                Operand::Register(Register::E),
+                Operand::Register(Register::C),
+            )),
+            0x5A => Ok(Op::LD(
+                Operand::Register(Register::E),
+                Operand::Register(Register::E),
+            )),
+            0x5B => Ok(Op::LD(
+                Operand::Register(Register::E),
+                Operand::Register(Register::E),
+            )),
+            0x5C => Ok(Op::LD(
+                Operand::Register(Register::E),
+                Operand::Register(Register::H),
+            )),
+            0x5D => Ok(Op::LD(
+                Operand::Register(Register::E),
+                Operand::Register(Register::L),
+            )),
+            0x5E => {
+                let value = self.mmu.word(self.hl() as usize)?;
+                Ok(Op::LD(Operand::Register(Register::E), Operand::Word(value)))
+            }
+
+            // LD H, x
+            0x60 => Ok(Op::LD(
+                Operand::Register(Register::H),
+                Operand::Register(Register::B),
+            )),
+
+            0x61 => Ok(Op::LD(
+                Operand::Register(Register::H),
+                Operand::Register(Register::C),
+            )),
+
+            0x62 => Ok(Op::LD(
+                Operand::Register(Register::H),
+                Operand::Register(Register::D),
+            )),
+
+            0x63 => Ok(Op::LD(
+                Operand::Register(Register::H),
+                Operand::Register(Register::E),
+            )),
+
+            0x64 => Ok(Op::LD(
+                Operand::Register(Register::H),
+                Operand::Register(Register::H),
+            )),
+
+            0x65 => Ok(Op::LD(
+                Operand::Register(Register::H),
+                Operand::Register(Register::L),
+            )),
+
+            0x66 => {
+                let value = self.mmu.word(self.hl() as usize)?;
+                Ok(Op::LD(Operand::Register(Register::H), Operand::Word(value)))
+            }
+
+            // LD L, x
+            0x68 => Ok(Op::LD(
+                Operand::Register(Register::L),
+                Operand::Register(Register::B),
+            )),
+
+            0x69 => Ok(Op::LD(
+                Operand::Register(Register::L),
+                Operand::Register(Register::C),
+            )),
+
+            0x6a => Ok(Op::LD(
+                Operand::Register(Register::L),
+                Operand::Register(Register::D),
+            )),
+
+            0x6b => Ok(Op::LD(
+                Operand::Register(Register::L),
+                Operand::Register(Register::E),
+            )),
+
+            0x6c => Ok(Op::LD(
+                Operand::Register(Register::L),
+                Operand::Register(Register::H),
+            )),
+
+            0x6d => Ok(Op::LD(
+                Operand::Register(Register::L),
+                Operand::Register(Register::L),
+            )),
+
+            0x6e => {
+                let value = self.mmu.word(self.hl() as usize)?;
+                Ok(Op::LD(Operand::Register(Register::L), Operand::Word(value)))
+            }
+
+            // LD (HL), x
+            0x70 => Ok(Op::LD(
+                Operand::Indirect(Register::HL),
+                Operand::Register(Register::B),
+            )),
+
+            0x71 => Ok(Op::LD(
+                Operand::Indirect(Register::HL),
+                Operand::Register(Register::C),
+            )),
+
+            0x72 => Ok(Op::LD(
+                Operand::Indirect(Register::HL),
+                Operand::Register(Register::D),
+            )),
+
+            0x73 => Ok(Op::LD(
+                Operand::Indirect(Register::HL),
+                Operand::Register(Register::E),
+            )),
+
+            0x74 => Ok(Op::LD(
+                Operand::Indirect(Register::HL),
+                Operand::Register(Register::H),
+            )),
+
+            0x75 => Ok(Op::LD(
+                Operand::Indirect(Register::HL),
+                Operand::Register(Register::L),
+            )),
+
+            // LD SP, $nn
+            0x31 => {
+                let value = self.mmu.word(self.pc+1)?;
+                Ok(Op::LD(Operand::Register(Register::SP), Operand::Direct(value)))
+            }
+
+            _ => Err(GBError::UnknownOperation(op)),
         }
     }
 
-    pub fn execute_instruction(&mut self, instruction: Op) {
-        let pc_change = match instruction {
-            Op::CLS => self.clear_vram(),
-            // Op::RET => {}
-            Op::JP(dst) => {
-                ProgramCounter::Jump(dst as usize)
-            }
-            // Op::JPREG(_, _) => {}
-            // Op::CALL(_) => {}
-            // Op::SE(_, _) => {}
-            // Op::SNE(_, _) => {}
-            Op::LD(dst, src) => {
-                if let Operand::Register(dst) = dst {
-                    if let Operand::Byte(src) = src {
-                        match dst {
-                            Register::V(dst) => { self.v[dst] = src; }
-                            _ => panic!("can only load byte int Vx register"),
-                        };
-                    }
-                    if let Operand::Addr(src) = src {
-                        match dst {
-                            Register::I => { self.i = src as usize }
-                            _ => panic!("cannot load address unless dst is i"),
-                        }
-                    }
-                }
+    pub fn execute_instruction(&mut self, instruction: Op) {}
 
-                ProgramCounter::Next
-            }
-            // Op::ADD(_, _) => {}
-            // Op::OR(_, _) => {}
-            // Op::AND(_, _) => {}
-            // Op::XOR(_, _) => {}
-            // Op::SUB(_, _) => {}
-            // Op::SHR(_, _) => {}
-            // Op::SUBN(_, _) => {}
-            // Op::SHL(_, _) => {}
-            // Op::RND(_, _) => {}
-            // Op::DRAW(_, _, _) => {}
-            // Op::SKP(_) => {}
-            // Op::SKNP(_) => {}
-            // Op::SKIPKEY(_) => {}
-            // Op::SKIPNOKEY(_) => {}
-            // Op::WAITKEY(_) => {}
-            // Op::SPRITECHAR(_) => {}
-            // Op::MOVBCD(_) => {}
-            // Op::READM(_) => {}
-            // Op::WRITEM(_) => {}
-            _ => ProgramCounter::Next,
-        };
-
-        match pc_change {
-            ProgramCounter::Next => { self.pc += 2 }
-            ProgramCounter::Jump(addr) => { self.pc = addr }
-        }
-    }
-
-    fn clear_vram(&mut self) -> ProgramCounter {
+    pub fn clear_vram(&mut self) -> ProgramCounter {
         self.mmu.clear_vram();
         ProgramCounter::Next
     }

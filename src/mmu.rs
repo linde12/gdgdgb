@@ -26,7 +26,7 @@ impl Mmu {
         }
     }
 
-    fn read_byte(&self, index: usize) -> Result<u8, GBError> {
+    pub fn byte(&self, index: usize) -> Result<u8, GBError> {
         match index {
             0x0000 ..= 0x7FFF => Ok(self.rom[index]),
             0x8000 ..= 0x9FFF => Ok(self.vram[index - 0x8000]),
@@ -40,9 +40,9 @@ impl Mmu {
         }
     }
 
-    pub fn read_word(&self, index: usize) -> Result<u16, GBError> {
-        let first = self.read_byte(index)?;
-        let second = self.read_byte(index + 1)?;
+    pub fn word(&self, index: usize) -> Result<u16, GBError> {
+        let first = self.byte(index)?;
+        let second = self.byte(index + 1)?;
 
         // little-endian, least significant bit comes first, hence | and << 8
         Ok((first as u16) | ((second as u16) << 8))
@@ -72,12 +72,11 @@ impl Mmu {
         if rom.len() > 4096 {
             return Err(GBError::LoadRom("rom size too large".into()));
         }
-        // self.mem.clone_from_slice(&rom);
+
+        // TODO: Revisit later, nicer way?
         for (i, item) in rom.iter().enumerate() {
-            self.write_byte(0x0000 + i, *item);
+            self.write_byte(i, *item);
         }
-        // copy(&mut self.mem[..], &mut rom);
-        // self.mem = rom;
         Ok(())
     }
 

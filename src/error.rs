@@ -3,7 +3,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum GBError {
     #[error("Unknown operation {:?}", .0)]
-    UnknownOperation(u16),
+    UnknownOperation(u8),
 
     #[error("Unable to write byte")]
     WriteByte,
