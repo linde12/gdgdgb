@@ -2,6 +2,16 @@ use crate::error::GBError;
 use crate::mmu::Mmu;
 
 const IO_REGISTER_OFFSET: u16 = 0xff00;
+static DEFAULT_REGISTER_ORDER: [Register; 8] = [
+    Register::B,
+    Register::C,
+    Register::D,
+    Register::E,
+    Register::H,
+    Register::L,
+    Register::HL,
+    Register::A,
+];
 
 #[derive(Debug)]
 pub enum ProgramCounter {
@@ -55,7 +65,7 @@ pub enum Target {
 #[derive(Debug)]
 pub enum Op {
     NOP,
-    PREFIX, // 0xCB
+    PREFIX,                  // 0xCB
     LD(Destination, Source), // Load Operand 2 into Operand 1
     XOR(Destination, Source),
 }
@@ -619,12 +629,10 @@ impl Cpu {
                 ))
             }
 
-            0xAF => {
-                Ok(Op::XOR(
-                    Destination::Direct(Target::Register(Register::A)),
-                    Source::Direct(Target::Register(Register::A)),
-                ))
-            }
+            0xAF => Ok(Op::XOR(
+                Destination::Direct(Target::Register(Register::A)),
+                Source::Direct(Target::Register(Register::A)),
+            )),
 
             0xCB => {
                 self.cb = true;
@@ -636,6 +644,19 @@ impl Cpu {
     }
 
     fn match_cb(&mut self, op: u8) -> Result<Op, GBError> {
+        // match op {
+        //     0x00..=0x07 => {
+        //         let low = op & 0x0F;
+        //         match low {
+        //             0 => Register::B,
+        //             1 => Register::C,
+        //             2 => Register::D,
+        //             3 => Register::E,
+        //             4 => Register::F,
+        //             4 => Register::F,
+        //         }
+        //     }
+        // }
         Err(GBError::UnknownOperation(op))
     }
 
