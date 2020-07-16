@@ -89,6 +89,14 @@ pub enum Op {
     XOR(Destination, Source),
     CP(Destination, Source),
     RLC(Destination),
+    RRC(Destination),
+    RL(Destination),
+    RR(Destination),
+    SLA(Destination),
+    SRA(Destination),
+    SWAP(Destination),
+    SRL(Destination),
+    BIT(u8, Source),
 }
 pub struct Cpu {
     mmu: Mmu,
@@ -160,8 +168,8 @@ impl Cpu {
         let op = self.byte()?;
 
         if self.cb {
-            self.match_cb(op)?;
-            self.cb = false
+            self.cb = false;
+            return self.match_cb(op);
         }
 
         match op {
@@ -733,14 +741,119 @@ impl Cpu {
 
     fn match_cb(&mut self, op: u8) -> Result<Op, GBError> {
         match op {
-            // RLC B->(HL)
+            // RLC B->A
             0x00..=0x07 => {
                 let low = op & 0x0F;
                 let reg = DEFAULT_DST_REGISTER_ORDER[low as usize];
                 Ok(Op::RLC(reg))
             }
 
-            _ => Err(GBError::UnknownOperation(op)),
+            // RRC B->A
+            0x08..=0x0F => {
+                let low = op & 0x0F;
+                let reg = DEFAULT_DST_REGISTER_ORDER[low as usize];
+                Ok(Op::RRC(reg))
+            }
+
+            // RL B->A
+            0x10..=0x17 => {
+                let low = op & 0x0F;
+                let reg = DEFAULT_DST_REGISTER_ORDER[low as usize];
+                Ok(Op::RL(reg))
+            }
+
+            // RR B->A
+            0x18..=0x1F => {
+                let low = op & 0x0F;
+                let reg = DEFAULT_DST_REGISTER_ORDER[low as usize];
+                Ok(Op::RR(reg))
+            }
+
+            // SLA B->A
+            0x20..=0x27 => {
+                let low = op & 0x0F;
+                let reg = DEFAULT_DST_REGISTER_ORDER[low as usize];
+                Ok(Op::SLA(reg))
+            }
+
+            // SLR B->A
+            0x28..=0x2F => {
+                let low = op & 0x0F;
+                let reg = DEFAULT_DST_REGISTER_ORDER[low as usize];
+                Ok(Op::SRA(reg))
+            }
+
+            // SWAP B->A
+            0x30..=0x37 => {
+                let low = op & 0x0F;
+                let reg = DEFAULT_DST_REGISTER_ORDER[low as usize];
+                Ok(Op::SWAP(reg))
+            }
+
+            // SRL B->A
+            0x38..=0x3F => {
+                let low = op & 0x0F;
+                let reg = DEFAULT_DST_REGISTER_ORDER[low as usize];
+                Ok(Op::SRL(reg))
+            }
+
+            // BIT 0, B->A
+            0x40..=0x47 => {
+                let low = op & 0x0F;
+                let reg = DEFAULT_SRC_REGISTER_ORDER[low as usize];
+                Ok(Op::BIT(0, reg))
+            }
+
+            // BIT 1, B->A
+            0x48..=0x4F => {
+                let low = op & 0x0F - 8;
+                let reg = DEFAULT_SRC_REGISTER_ORDER[low as usize];
+                Ok(Op::BIT(1, reg))
+            }
+
+            // BIT 2, B->A
+            0x50..=0x57 => {
+                let low = op & 0x0F;
+                let reg = DEFAULT_SRC_REGISTER_ORDER[low as usize];
+                Ok(Op::BIT(2, reg))
+            }
+
+            // BIT 3, B->A
+            0x58..=0x5F => {
+                let low = op & 0x0F - 8;
+                let reg = DEFAULT_SRC_REGISTER_ORDER[low as usize];
+                Ok(Op::BIT(3, reg))
+            }
+
+            // BIT 4, B->A
+            0x60..=0x67 => {
+                let low = op & 0x0F;
+                let reg = DEFAULT_SRC_REGISTER_ORDER[low as usize];
+                Ok(Op::BIT(4, reg))
+            }
+
+            // BIT 5, B->A
+            0x68..=0x6F => {
+                let low = op & 0x0F - 8;
+                let reg = DEFAULT_SRC_REGISTER_ORDER[low as usize];
+                Ok(Op::BIT(5, reg))
+            }
+
+            // BIT 6, B->A
+            0x70..=0x77 => {
+                let low = op & 0x0F;
+                let reg = DEFAULT_SRC_REGISTER_ORDER[low as usize];
+                Ok(Op::BIT(6, reg))
+            }
+
+            // BIT 7, B->A
+            0x78..=0x7F => {
+                let low = op & 0x0F - 8;
+                let reg = DEFAULT_SRC_REGISTER_ORDER[low as usize];
+                Ok(Op::BIT(7, reg))
+            }
+
+            _ => Err(GBError::UnknownOperation(op))
         }
     }
 
