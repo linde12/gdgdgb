@@ -2,15 +2,17 @@ use crate::error::GBError;
 use crate::mmu::Mmu;
 
 const IO_REGISTER_OFFSET: u16 = 0xff00;
-static DEFAULT_REGISTER_ORDER: [Register; 8] = [
-    Register::B,
-    Register::C,
-    Register::D,
-    Register::E,
-    Register::H,
-    Register::L,
-    Register::HL,
-    Register::A,
+
+// Used to algorithmically parse opcode ranges
+static DEFAULT_REGISTER_ORDER: [Destination; 8] = [
+    Destination::Direct(Target::Register(Register::B)),
+    Destination::Direct(Target::Register(Register::C)),
+    Destination::Direct(Target::Register(Register::D)),
+    Destination::Direct(Target::Register(Register::E)),
+    Destination::Direct(Target::Register(Register::H)),
+    Destination::Direct(Target::Register(Register::L)),
+    Destination::Indirect(Target::Register(Register::HL)), // (HL)
+    Destination::Direct(Target::Register(Register::A)),
 ];
 
 #[derive(Debug)]
@@ -20,7 +22,7 @@ pub enum ProgramCounter {
 }
 
 // See https://www.cs.helsinki.fi/u/kerola/tito/koksi_doc/memaddr.html
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum Destination {
     Direct(Target),       // Direct value, either a register or u16 address
     Indirect(Target),     // A pointer to an address, either from register or an address location
@@ -56,7 +58,7 @@ pub enum Register {
     SP,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum Target {
     Register(Register),
     Address(u16),
@@ -68,6 +70,7 @@ pub enum Op {
     PREFIX,                  // 0xCB
     LD(Destination, Source), // Load Operand 2 into Operand 1
     XOR(Destination, Source),
+    RLC(Destination),
 }
 pub struct Cpu {
     mmu: Mmu,
@@ -644,20 +647,16 @@ impl Cpu {
     }
 
     fn match_cb(&mut self, op: u8) -> Result<Op, GBError> {
-        // match op {
-        //     0x00..=0x07 => {
-        //         let low = op & 0x0F;
-        //         match low {
-        //             0 => Register::B,
-        //             1 => Register::C,
-        //             2 => Register::D,
-        //             3 => Register::E,
-        //             4 => Register::F,
-        //             4 => Register::F,
-        //         }
-        //     }
-        // }
-        Err(GBError::UnknownOperation(op))
+        match op {
+            // RLC B->(HL)
+            0x00..=0x07 => {
+                let low = op & 0x0F;
+                let reg = DEFAULT_REGISTER_ORDER[low as usize];
+                Ok(Op::RLC(reg))
+            }
+
+            _ => Err(GBError::UnknownOperation(op))
+        }
     }
 
     pub fn execute_instruction(&mut self, instruction: Op) {}
