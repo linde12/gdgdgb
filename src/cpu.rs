@@ -4,7 +4,7 @@ use crate::mmu::Mmu;
 const IO_REGISTER_OFFSET: u16 = 0xff00;
 
 // Used to algorithmically parse opcode ranges
-static DEFAULT_REGISTER_ORDER: [Destination; 8] = [
+static DEFAULT_DST_REGISTER_ORDER: [Destination; 8] = [
     Destination::Direct(Target::Register(Register::B)),
     Destination::Direct(Target::Register(Register::C)),
     Destination::Direct(Target::Register(Register::D)),
@@ -13,6 +13,17 @@ static DEFAULT_REGISTER_ORDER: [Destination; 8] = [
     Destination::Direct(Target::Register(Register::L)),
     Destination::Indirect(Target::Register(Register::HL)), // (HL)
     Destination::Direct(Target::Register(Register::A)),
+];
+
+static DEFAULT_SRC_REGISTER_ORDER: [Source; 8] = [
+    Source::Direct(Target::Register(Register::B)),
+    Source::Direct(Target::Register(Register::C)),
+    Source::Direct(Target::Register(Register::D)),
+    Source::Direct(Target::Register(Register::E)),
+    Source::Direct(Target::Register(Register::H)),
+    Source::Direct(Target::Register(Register::L)),
+    Source::Indirect(Target::Register(Register::HL)), // (HL)
+    Source::Direct(Target::Register(Register::A)),
 ];
 
 #[derive(Debug)]
@@ -30,7 +41,7 @@ pub enum Destination {
 }
 
 // See https://www.cs.helsinki.fi/u/kerola/tito/koksi_doc/memaddr.html
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum Source {
     Immediate8(u8),
     Immediate16(u16),
@@ -67,8 +78,13 @@ pub enum Target {
 #[derive(Debug)]
 pub enum Op {
     NOP,
-    PREFIX,                  // 0xCB
-    LD(Destination, Source), // Load Operand 2 into Operand 1
+    PREFIX,                   // 0xCB
+    LD(Destination, Source),  // Load Operand 2 into Operand 1
+    ADD(Destination, Source), // Load Operand 2 into Operand 1
+    ADC(Destination, Source), // Load Operand 2 into Operand 1
+    SUB(Destination, Source), // Load Operand 2 into Operand 1
+    AND(Destination, Source), // Load Operand 2 into Operand 1
+    OR(Destination, Source),  // Load Operand 2 into Operand 1
     XOR(Destination, Source),
     RLC(Destination),
 }
@@ -632,6 +648,24 @@ impl Cpu {
                 ))
             }
 
+            // ADD A, $n
+            0x80..=0x87 => {
+                let index = (op & 0x0F) as usize; // Low nibble will be our index
+                Ok(Op::ADD(
+                    Destination::Direct(Target::Register(Register::A)),
+                    DEFAULT_SRC_REGISTER_ORDER[index],
+                ))
+            }
+
+            // ADC A, $n
+            0x88..=0x8F => {
+                let index = ((op & 0x0F) - 7) as usize; // Low nibble with offset -7 will be our index
+                Ok(Op::ADC(
+                    Destination::Direct(Target::Register(Register::A)),
+                    DEFAULT_SRC_REGISTER_ORDER[index],
+                ))
+            }
+
             0xAF => Ok(Op::XOR(
                 Destination::Direct(Target::Register(Register::A)),
                 Source::Direct(Target::Register(Register::A)),
@@ -651,11 +685,11 @@ impl Cpu {
             // RLC B->(HL)
             0x00..=0x07 => {
                 let low = op & 0x0F;
-                let reg = DEFAULT_REGISTER_ORDER[low as usize];
+                let reg = DEFAULT_DST_REGISTER_ORDER[low as usize];
                 Ok(Op::RLC(reg))
             }
 
-            _ => Err(GBError::UnknownOperation(op))
+            _ => Err(GBError::UnknownOperation(op)),
         }
     }
 
