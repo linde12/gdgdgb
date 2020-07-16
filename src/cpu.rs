@@ -78,14 +78,16 @@ pub enum Target {
 #[derive(Debug)]
 pub enum Op {
     NOP,
-    PREFIX,                   // 0xCB
-    LD(Destination, Source),  // Load Operand 2 into Operand 1
-    ADD(Destination, Source), // Load Operand 2 into Operand 1
-    ADC(Destination, Source), // Load Operand 2 into Operand 1
-    SUB(Destination, Source), // Load Operand 2 into Operand 1
-    AND(Destination, Source), // Load Operand 2 into Operand 1
-    OR(Destination, Source),  // Load Operand 2 into Operand 1
+    PREFIX,                  // 0xCB
+    LD(Destination, Source), // Load Operand 2 into Operand 1
+    ADD(Destination, Source),
+    ADC(Destination, Source),
+    SUB(Destination, Source),
+    SBC(Destination, Source),
+    AND(Destination, Source),
+    OR(Destination, Source),
     XOR(Destination, Source),
+    CP(Destination, Source),
     RLC(Destination),
 }
 pub struct Cpu {
@@ -659,17 +661,66 @@ impl Cpu {
 
             // ADC A, $n
             0x88..=0x8F => {
-                let index = ((op & 0x0F) - 7) as usize; // Low nibble with offset -7 will be our index
+                let index = ((op & 0x0F) - 8) as usize; // Low nibble with offset -8 will be our index
                 Ok(Op::ADC(
                     Destination::Direct(Target::Register(Register::A)),
                     DEFAULT_SRC_REGISTER_ORDER[index],
                 ))
             }
 
-            0xAF => Ok(Op::XOR(
-                Destination::Direct(Target::Register(Register::A)),
-                Source::Direct(Target::Register(Register::A)),
-            )),
+            // SUB A, $n
+            0x90..=0x97 => {
+                let index = (op & 0x0F) as usize; // Low nibble will be our index
+                Ok(Op::SUB(
+                    Destination::Direct(Target::Register(Register::A)),
+                    DEFAULT_SRC_REGISTER_ORDER[index],
+                ))
+            }
+
+            // SBC A, $n
+            0x98..=0x9F => {
+                let index = ((op & 0x0F) - 8) as usize; // Low nibble with offset -8 will be our index
+                Ok(Op::SBC(
+                    Destination::Direct(Target::Register(Register::A)),
+                    DEFAULT_SRC_REGISTER_ORDER[index],
+                ))
+            }
+
+            // AND A, $n
+            0xA0..=0xA7 => {
+                let index = (op & 0x0F) as usize; // Low nibble will be our index
+                Ok(Op::AND(
+                    Destination::Direct(Target::Register(Register::A)),
+                    DEFAULT_SRC_REGISTER_ORDER[index],
+                ))
+            }
+
+            // XOR A, $n
+            0xA8..=0xAF => {
+                let index = ((op & 0x0F) - 8) as usize; // Low nibble with offset -8 will be our index
+                Ok(Op::XOR(
+                    Destination::Direct(Target::Register(Register::A)),
+                    DEFAULT_SRC_REGISTER_ORDER[index],
+                ))
+            }
+
+            // OR A, $n
+            0xB0..=0xB7 => {
+                let index = (op & 0x0F) as usize; // Low nibble will be our index
+                Ok(Op::OR(
+                    Destination::Direct(Target::Register(Register::A)),
+                    DEFAULT_SRC_REGISTER_ORDER[index],
+                ))
+            }
+
+            // CP A, $n
+            0xB8..=0xBF => {
+                let index = ((op & 0x0F) - 8) as usize; // Low nibble with offset -8 will be our index
+                Ok(Op::CP(
+                    Destination::Direct(Target::Register(Register::A)),
+                    DEFAULT_SRC_REGISTER_ORDER[index],
+                ))
+            }
 
             0xCB => {
                 self.cb = true;
