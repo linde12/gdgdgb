@@ -78,7 +78,9 @@ pub enum Target {
 #[derive(Debug)]
 pub enum Op {
     NOP,
-    PREFIX,                  // 0xCB
+    PREFIX, // 0xCB
+    INC(Destination),
+    DEC(Destination),
     LD(Destination, Source), // Load Operand 2 into Operand 1
     ADD(Destination, Source),
     ADC(Destination, Source),
@@ -730,6 +732,45 @@ impl Cpu {
                 ))
             }
 
+            // INC $nn
+            0x03 | 0x13 | 0x23 | 0x33 => {
+                let register_order: [Destination; 4] = [
+                    Destination::Direct(Target::Register(Register::BC)),
+                    Destination::Direct(Target::Register(Register::DE)),
+                    Destination::Direct(Target::Register(Register::HL)),
+                    Destination::Direct(Target::Register(Register::SP)),
+                ];
+
+                let index = (op & 0xF0) as usize; // High nibble as index
+                Ok(Op::INC(register_order[index]))
+            }
+
+            // INC $n
+            0x04 | 0x14 | 0x24 | 0x34 => {
+                let register_order: [Destination; 4] = [
+                    Destination::Direct(Target::Register(Register::B)),
+                    Destination::Direct(Target::Register(Register::D)),
+                    Destination::Direct(Target::Register(Register::H)),
+                    Destination::Indirect(Target::Register(Register::HL)),
+                ];
+
+                let index = (op & 0xF0) as usize; // High nibble as index
+                Ok(Op::INC(register_order[index]))
+            }
+
+            // DEC $n
+            0x05 | 0x15 | 0x25 | 0x35 => {
+                let register_order: [Destination; 4] = [
+                    Destination::Direct(Target::Register(Register::B)),
+                    Destination::Direct(Target::Register(Register::D)),
+                    Destination::Direct(Target::Register(Register::H)),
+                    Destination::Indirect(Target::Register(Register::HL)),
+                ];
+
+                let index = (op & 0xF0) as usize; // High nibble as index
+                Ok(Op::DEC(register_order[index]))
+            }
+
             0xCB => {
                 self.cb = true;
                 Ok(Op::PREFIX)
@@ -853,7 +894,7 @@ impl Cpu {
                 Ok(Op::BIT(7, reg))
             }
 
-            _ => Err(GBError::UnknownOperation(op))
+            _ => Err(GBError::UnknownOperation(op)),
         }
     }
 
