@@ -26,7 +26,6 @@ fn main() -> anyhow::Result<()> {
         "d" | "disassemble" | "disasm" => loop {
             let op = cpu.read_instruction()?;
             println!("{:#x}\t{:?}", cpu.pc, op);
-            cpu.pc += 2;
         },
         "r" | "run" => loop {
             let op = cpu.read_instruction()?;

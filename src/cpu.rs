@@ -9,14 +9,22 @@ pub enum ProgramCounter {
     Jump(usize),
 }
 
+// See https://www.cs.helsinki.fi/u/kerola/tito/koksi_doc/memaddr.html
 #[derive(Debug)]
-pub enum Operand {
-    Register(Register),
-    IndirectRegister(Register),
-    IndirectOffsetRegister(Register, u16),
-    Byte(u8),
-    Word(u16),
-    OffsetWord(u16, u16),
+pub enum Destination {
+    Direct(Target),       // Direct value, either a register or u16 address
+    Indirect(Target),     // A pointer to an address, either from register or an address location
+    Indexed(Target, u16), // Value of target+offset, where target can be a value in a register or a u16 and offset is a u16
+}
+
+// See https://www.cs.helsinki.fi/u/kerola/tito/koksi_doc/memaddr.html
+#[derive(Debug)]
+pub enum Source {
+    Immediate8(u8),
+    Immediate16(u16),
+    Direct(Target),       // Direct value, either a register or u16 address
+    Indirect(Target),     // A pointer to an address, either from register or an address location
+    Indexed(Target, u16), // Value of target+offset, where target can be a value in a register or a u16 and offset is a u16
 }
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
@@ -33,15 +41,21 @@ pub enum Register {
     BC,
     DE,
     HL,
-    HLD, // HL Decrement (HL-)
-    HLI, // HL Increment (HL+)
+    HLD, // Not an actual register, HL Decrement (HL-)
+    HLI, // Not an actual register, HL Increment (HL+)
     SP,
+}
+
+#[derive(Debug)]
+pub enum Target {
+    Register(Register),
+    Address(u16),
 }
 
 #[derive(Debug)]
 pub enum Op {
     NOP,
-    LD(Operand, Operand),
+    LD(Destination, Source), // Load Operand 2 into Operand 1
 }
 pub struct Cpu {
     mmu: Mmu,
@@ -92,472 +106,504 @@ impl Cpu {
         self.l = (value & 0x0F) as u8;
         self.h = ((value & 0xF0) >> 8) as u8;
     }
+    pub fn byte(&mut self) -> Result<u8, GBError> {
+        let value = self.mmu.byte(self.pc)?;
+        self.pc += 1;
+        Ok(value)
+    }
+
+    pub fn word(&mut self) -> Result<u16, GBError> {
+        let value = self.mmu.word(self.pc)?;
+        self.pc += 2;
+        Ok(value)
+    }
 
     pub fn read_instruction(&mut self) -> Result<Op, GBError> {
-        let op = self.mmu.byte(self.pc)?;
+        let op = self.byte()?;
 
         match op {
             0x00 => Ok(Op::NOP),
             0x01 => {
-                let value = self.mmu.word(self.pc)?;
+                let value = self.word()?;
                 Ok(Op::LD(
-                    Operand::Register(Register::BC),
-                    Operand::Word(value),
+                    Destination::Direct(Target::Register(Register::BC)),
+                    Source::Immediate16(value),
                 ))
             }
 
             0x06 => {
-                let value = self.mmu.byte(self.pc)?;
-                Ok(Op::LD(Operand::Register(Register::B), Operand::Byte(value)))
+                let value = self.byte()?;
+                Ok(Op::LD(
+                    Destination::Direct(Target::Register(Register::B)),
+                    Source::Immediate8(value),
+                ))
             }
 
             0x0E => {
-                let value = self.mmu.byte(self.pc)?;
-                Ok(Op::LD(Operand::Register(Register::C), Operand::Byte(value)))
+                let value = self.byte()?;
+                Ok(Op::LD(
+                    Destination::Direct(Target::Register(Register::C)),
+                    Source::Immediate8(value),
+                ))
             }
 
             0x16 => {
-                let value = self.mmu.byte(self.pc)?;
-                Ok(Op::LD(Operand::Register(Register::D), Operand::Byte(value)))
+                let value = self.byte()?;
+                Ok(Op::LD(
+                    Destination::Direct(Target::Register(Register::D)),
+                    Source::Immediate8(value),
+                ))
             }
 
             0x1E => {
-                let value = self.mmu.byte(self.pc)?;
-                Ok(Op::LD(Operand::Register(Register::E), Operand::Byte(value)))
+                let value = self.byte()?;
+                Ok(Op::LD(
+                    Destination::Direct(Target::Register(Register::E)),
+                    Source::Immediate8(value),
+                ))
             }
 
             0x26 => {
-                let value = self.mmu.byte(self.pc)?;
-                Ok(Op::LD(Operand::Register(Register::H), Operand::Byte(value)))
+                let value = self.byte()?;
+                Ok(Op::LD(
+                    Destination::Direct(Target::Register(Register::H)),
+                    Source::Immediate8(value),
+                ))
             }
 
             0x2E => {
-                let value = self.mmu.byte(self.pc)?;
-                Ok(Op::LD(Operand::Register(Register::L), Operand::Byte(value)))
+                let value = self.byte()?;
+                Ok(Op::LD(
+                    Destination::Direct(Target::Register(Register::L)),
+                    Source::Immediate8(value),
+                ))
             }
 
             // LD A, x
             0x7F => Ok(Op::LD(
-                Operand::Register(Register::A),
-                Operand::Register(Register::A),
+                Destination::Direct(Target::Register(Register::A)),
+                Source::Direct(Target::Register(Register::A)),
             )),
             0x78 => Ok(Op::LD(
-                Operand::Register(Register::A),
-                Operand::Register(Register::B),
+                Destination::Direct(Target::Register(Register::A)),
+                Source::Direct(Target::Register(Register::B)),
             )),
             0x79 => Ok(Op::LD(
-                Operand::Register(Register::A),
-                Operand::Register(Register::C),
+                Destination::Direct(Target::Register(Register::A)),
+                Source::Direct(Target::Register(Register::C)),
             )),
             0x7A => Ok(Op::LD(
-                Operand::Register(Register::A),
-                Operand::Register(Register::D),
+                Destination::Direct(Target::Register(Register::A)),
+                Source::Direct(Target::Register(Register::D)),
             )),
             0x7B => Ok(Op::LD(
-                Operand::Register(Register::A),
-                Operand::Register(Register::E),
+                Destination::Direct(Target::Register(Register::A)),
+                Source::Direct(Target::Register(Register::E)),
             )),
             0x7C => Ok(Op::LD(
-                Operand::Register(Register::A),
-                Operand::Register(Register::H),
+                Destination::Direct(Target::Register(Register::A)),
+                Source::Direct(Target::Register(Register::H)),
             )),
             0x7D => Ok(Op::LD(
-                Operand::Register(Register::A),
-                Operand::Register(Register::L),
+                Destination::Direct(Target::Register(Register::A)),
+                Source::Direct(Target::Register(Register::L)),
             )),
             0x7E => Ok(Op::LD(
-                Operand::Register(Register::A),
-                Operand::IndirectRegister(Register::HL),
+                Destination::Direct(Target::Register(Register::A)),
+                Source::Indirect(Target::Register(Register::HL)),
             )),
 
             // LD B, x
             0x40 => Ok(Op::LD(
-                Operand::Register(Register::B),
-                Operand::Register(Register::B),
+                Destination::Direct(Target::Register(Register::B)),
+                Source::Direct(Target::Register(Register::B)),
             )),
 
             0x41 => Ok(Op::LD(
-                Operand::Register(Register::B),
-                Operand::Register(Register::C),
+                Destination::Direct(Target::Register(Register::B)),
+                Source::Direct(Target::Register(Register::C)),
             )),
 
             0x42 => Ok(Op::LD(
-                Operand::Register(Register::B),
-                Operand::Register(Register::D),
+                Destination::Direct(Target::Register(Register::B)),
+                Source::Direct(Target::Register(Register::D)),
             )),
 
             0x43 => Ok(Op::LD(
-                Operand::Register(Register::B),
-                Operand::Register(Register::E),
+                Destination::Direct(Target::Register(Register::B)),
+                Source::Direct(Target::Register(Register::E)),
             )),
 
             0x44 => Ok(Op::LD(
-                Operand::Register(Register::B),
-                Operand::Register(Register::H),
+                Destination::Direct(Target::Register(Register::B)),
+                Source::Direct(Target::Register(Register::H)),
             )),
 
             0x45 => Ok(Op::LD(
-                Operand::Register(Register::B),
-                Operand::Register(Register::L),
+                Destination::Direct(Target::Register(Register::B)),
+                Source::Direct(Target::Register(Register::L)),
             )),
 
             0x46 => Ok(Op::LD(
-                Operand::Register(Register::B),
-                Operand::IndirectRegister(Register::HL),
+                Destination::Direct(Target::Register(Register::B)),
+                Source::Indirect(Target::Register(Register::HL)),
             )),
 
             // LD C, x
             0x48 => Ok(Op::LD(
-                Operand::Register(Register::C),
-                Operand::Register(Register::B),
+                Destination::Direct(Target::Register(Register::C)),
+                Source::Direct(Target::Register(Register::B)),
             )),
             0x49 => Ok(Op::LD(
-                Operand::Register(Register::C),
-                Operand::Register(Register::C),
+                Destination::Direct(Target::Register(Register::C)),
+                Source::Direct(Target::Register(Register::C)),
             )),
             0x4A => Ok(Op::LD(
-                Operand::Register(Register::C),
-                Operand::Register(Register::D),
+                Destination::Direct(Target::Register(Register::C)),
+                Source::Direct(Target::Register(Register::D)),
             )),
             0x4B => Ok(Op::LD(
-                Operand::Register(Register::C),
-                Operand::Register(Register::E),
+                Destination::Direct(Target::Register(Register::C)),
+                Source::Direct(Target::Register(Register::E)),
             )),
             0x4C => Ok(Op::LD(
-                Operand::Register(Register::C),
-                Operand::Register(Register::H),
+                Destination::Direct(Target::Register(Register::C)),
+                Source::Direct(Target::Register(Register::H)),
             )),
             0x4D => Ok(Op::LD(
-                Operand::Register(Register::C),
-                Operand::Register(Register::L),
+                Destination::Direct(Target::Register(Register::C)),
+                Source::Direct(Target::Register(Register::L)),
             )),
             0x4E => Ok(Op::LD(
-                Operand::Register(Register::C),
-                Operand::IndirectRegister(Register::HL),
+                Destination::Direct(Target::Register(Register::C)),
+                Source::Indirect(Target::Register(Register::HL)),
             )),
 
             // LD D, x
             0x50 => Ok(Op::LD(
-                Operand::Register(Register::D),
-                Operand::Register(Register::B),
+                Destination::Direct(Target::Register(Register::D)),
+                Source::Direct(Target::Register(Register::B)),
             )),
 
             0x51 => Ok(Op::LD(
-                Operand::Register(Register::D),
-                Operand::Register(Register::C),
+                Destination::Direct(Target::Register(Register::D)),
+                Source::Direct(Target::Register(Register::C)),
             )),
 
             0x52 => Ok(Op::LD(
-                Operand::Register(Register::D),
-                Operand::Register(Register::D),
+                Destination::Direct(Target::Register(Register::D)),
+                Source::Direct(Target::Register(Register::D)),
             )),
 
             0x53 => Ok(Op::LD(
-                Operand::Register(Register::D),
-                Operand::Register(Register::E),
+                Destination::Direct(Target::Register(Register::D)),
+                Source::Direct(Target::Register(Register::E)),
             )),
 
             0x54 => Ok(Op::LD(
-                Operand::Register(Register::D),
-                Operand::Register(Register::H),
+                Destination::Direct(Target::Register(Register::D)),
+                Source::Direct(Target::Register(Register::H)),
             )),
 
             0x55 => Ok(Op::LD(
-                Operand::Register(Register::D),
-                Operand::Register(Register::L),
+                Destination::Direct(Target::Register(Register::D)),
+                Source::Direct(Target::Register(Register::L)),
             )),
 
             0x56 => Ok(Op::LD(
-                Operand::Register(Register::D),
-                Operand::IndirectRegister(Register::HL),
+                Destination::Direct(Target::Register(Register::D)),
+                Source::Indirect(Target::Register(Register::HL)),
             )),
 
             // LD E, x
             0x58 => Ok(Op::LD(
-                Operand::Register(Register::E),
-                Operand::Register(Register::B),
+                Destination::Direct(Target::Register(Register::E)),
+                Source::Direct(Target::Register(Register::B)),
             )),
             0x59 => Ok(Op::LD(
-                Operand::Register(Register::E),
-                Operand::Register(Register::C),
+                Destination::Direct(Target::Register(Register::E)),
+                Source::Direct(Target::Register(Register::C)),
             )),
             0x5A => Ok(Op::LD(
-                Operand::Register(Register::E),
-                Operand::Register(Register::E),
+                Destination::Direct(Target::Register(Register::E)),
+                Source::Direct(Target::Register(Register::E)),
             )),
             0x5B => Ok(Op::LD(
-                Operand::Register(Register::E),
-                Operand::Register(Register::E),
+                Destination::Direct(Target::Register(Register::E)),
+                Source::Direct(Target::Register(Register::E)),
             )),
             0x5C => Ok(Op::LD(
-                Operand::Register(Register::E),
-                Operand::Register(Register::H),
+                Destination::Direct(Target::Register(Register::E)),
+                Source::Direct(Target::Register(Register::H)),
             )),
             0x5D => Ok(Op::LD(
-                Operand::Register(Register::E),
-                Operand::Register(Register::L),
+                Destination::Direct(Target::Register(Register::E)),
+                Source::Direct(Target::Register(Register::L)),
             )),
             0x5E => Ok(Op::LD(
-                Operand::Register(Register::E),
-                Operand::IndirectRegister(Register::HL),
+                Destination::Direct(Target::Register(Register::E)),
+                Source::Indirect(Target::Register(Register::HL)),
             )),
 
             // LD H, x
             0x60 => Ok(Op::LD(
-                Operand::Register(Register::H),
-                Operand::Register(Register::B),
+                Destination::Direct(Target::Register(Register::H)),
+                Source::Direct(Target::Register(Register::B)),
             )),
 
             0x61 => Ok(Op::LD(
-                Operand::Register(Register::H),
-                Operand::Register(Register::C),
+                Destination::Direct(Target::Register(Register::H)),
+                Source::Direct(Target::Register(Register::C)),
             )),
 
             0x62 => Ok(Op::LD(
-                Operand::Register(Register::H),
-                Operand::Register(Register::D),
+                Destination::Direct(Target::Register(Register::H)),
+                Source::Direct(Target::Register(Register::D)),
             )),
 
             0x63 => Ok(Op::LD(
-                Operand::Register(Register::H),
-                Operand::Register(Register::E),
+                Destination::Direct(Target::Register(Register::H)),
+                Source::Direct(Target::Register(Register::E)),
             )),
 
             0x64 => Ok(Op::LD(
-                Operand::Register(Register::H),
-                Operand::Register(Register::H),
+                Destination::Direct(Target::Register(Register::H)),
+                Source::Direct(Target::Register(Register::H)),
             )),
 
             0x65 => Ok(Op::LD(
-                Operand::Register(Register::H),
-                Operand::Register(Register::L),
+                Destination::Direct(Target::Register(Register::H)),
+                Source::Direct(Target::Register(Register::L)),
             )),
 
             0x66 => Ok(Op::LD(
-                Operand::Register(Register::H),
-                Operand::IndirectRegister(Register::HL),
+                Destination::Direct(Target::Register(Register::H)),
+                Source::Indirect(Target::Register(Register::HL)),
             )),
 
             // LD L, x
             0x68 => Ok(Op::LD(
-                Operand::Register(Register::L),
-                Operand::Register(Register::B),
+                Destination::Direct(Target::Register(Register::L)),
+                Source::Direct(Target::Register(Register::B)),
             )),
 
             0x69 => Ok(Op::LD(
-                Operand::Register(Register::L),
-                Operand::Register(Register::C),
+                Destination::Direct(Target::Register(Register::L)),
+                Source::Direct(Target::Register(Register::C)),
             )),
 
             0x6a => Ok(Op::LD(
-                Operand::Register(Register::L),
-                Operand::Register(Register::D),
+                Destination::Direct(Target::Register(Register::L)),
+                Source::Direct(Target::Register(Register::D)),
             )),
 
             0x6b => Ok(Op::LD(
-                Operand::Register(Register::L),
-                Operand::Register(Register::E),
+                Destination::Direct(Target::Register(Register::L)),
+                Source::Direct(Target::Register(Register::E)),
             )),
 
             0x6c => Ok(Op::LD(
-                Operand::Register(Register::L),
-                Operand::Register(Register::H),
+                Destination::Direct(Target::Register(Register::L)),
+                Source::Direct(Target::Register(Register::H)),
             )),
 
             0x6d => Ok(Op::LD(
-                Operand::Register(Register::L),
-                Operand::Register(Register::L),
+                Destination::Direct(Target::Register(Register::L)),
+                Source::Direct(Target::Register(Register::L)),
             )),
 
             0x6e => Ok(Op::LD(
-                Operand::Register(Register::L),
-                Operand::IndirectRegister(Register::HL),
+                Destination::Direct(Target::Register(Register::L)),
+                Source::Indirect(Target::Register(Register::HL)),
             )),
 
             // LD (HL), x
             0x70 => Ok(Op::LD(
-                Operand::IndirectRegister(Register::HL),
-                Operand::Register(Register::B),
+                Destination::Indirect(Target::Register(Register::HL)),
+                Source::Direct(Target::Register(Register::B)),
             )),
 
             0x71 => Ok(Op::LD(
-                Operand::IndirectRegister(Register::HL),
-                Operand::Register(Register::C),
+                Destination::Indirect(Target::Register(Register::HL)),
+                Source::Direct(Target::Register(Register::C)),
             )),
 
             0x72 => Ok(Op::LD(
-                Operand::IndirectRegister(Register::HL),
-                Operand::Register(Register::D),
+                Destination::Indirect(Target::Register(Register::HL)),
+                Source::Direct(Target::Register(Register::D)),
             )),
 
             0x73 => Ok(Op::LD(
-                Operand::IndirectRegister(Register::HL),
-                Operand::Register(Register::E),
+                Destination::Indirect(Target::Register(Register::HL)),
+                Source::Direct(Target::Register(Register::E)),
             )),
 
             0x74 => Ok(Op::LD(
-                Operand::IndirectRegister(Register::HL),
-                Operand::Register(Register::H),
+                Destination::Indirect(Target::Register(Register::HL)),
+                Source::Direct(Target::Register(Register::H)),
             )),
 
             0x75 => Ok(Op::LD(
-                Operand::IndirectRegister(Register::HL),
-                Operand::Register(Register::L),
+                Destination::Indirect(Target::Register(Register::HL)),
+                Source::Direct(Target::Register(Register::L)),
             )),
 
             // LD n, A
             0x47 => Ok(Op::LD(
-                Operand::Register(Register::B),
-                Operand::Register(Register::A),
+                Destination::Direct(Target::Register(Register::B)),
+                Source::Direct(Target::Register(Register::A)),
             )),
 
             0x4f => Ok(Op::LD(
-                Operand::Register(Register::C),
-                Operand::Register(Register::A),
+                Destination::Direct(Target::Register(Register::C)),
+                Source::Direct(Target::Register(Register::A)),
             )),
 
             0x57 => Ok(Op::LD(
-                Operand::Register(Register::D),
-                Operand::Register(Register::A),
+                Destination::Direct(Target::Register(Register::D)),
+                Source::Direct(Target::Register(Register::A)),
             )),
 
             0x5f => Ok(Op::LD(
-                Operand::Register(Register::E),
-                Operand::Register(Register::A),
+                Destination::Direct(Target::Register(Register::E)),
+                Source::Direct(Target::Register(Register::A)),
             )),
 
             0x67 => Ok(Op::LD(
-                Operand::Register(Register::H),
-                Operand::Register(Register::A),
+                Destination::Direct(Target::Register(Register::H)),
+                Source::Direct(Target::Register(Register::A)),
             )),
 
             0x6f => Ok(Op::LD(
-                Operand::Register(Register::L),
-                Operand::Register(Register::A),
+                Destination::Direct(Target::Register(Register::L)),
+                Source::Direct(Target::Register(Register::A)),
             )),
 
             0x02 => Ok(Op::LD(
-                Operand::IndirectRegister(Register::BC),
-                Operand::Register(Register::A),
+                Destination::Indirect(Target::Register(Register::BC)),
+                Source::Direct(Target::Register(Register::A)),
             )),
 
             0x12 => Ok(Op::LD(
-                Operand::IndirectRegister(Register::DE),
-                Operand::Register(Register::A),
+                Destination::Indirect(Target::Register(Register::DE)),
+                Source::Direct(Target::Register(Register::A)),
             )),
 
             0x77 => Ok(Op::LD(
-                Operand::IndirectRegister(Register::HL),
-                Operand::Register(Register::A),
+                Destination::Indirect(Target::Register(Register::HL)),
+                Source::Direct(Target::Register(Register::A)),
             )),
 
-            0xea => {
-                let value = self.mmu.word(self.pc)?;
-                Ok(Op::LD(Operand::Word(value), Operand::Register(Register::A)))
+            0xEA => {
+                let value = self.word()?;
+                Ok(Op::LD(
+                    Destination::Direct(Target::Address(value)),
+                    Source::Direct(Target::Register(Register::A)),
+                ))
             }
 
             // LD A, (C)
             // Same as LD A, (0xff00 + C)
-            0xf2 => Ok(Op::LD(
-                Operand::Register(Register::A),
-                Operand::IndirectOffsetRegister(Register::C, IO_REGISTER_OFFSET),
+            0xF2 => Ok(Op::LD(
+                Destination::Direct(Target::Register(Register::A)),
+                Source::Indexed(Target::Register(Register::C), IO_REGISTER_OFFSET),
             )),
 
             // LD (C), A
             // Same as LD (0xff00 + C), A
-            0xe2 => Ok(Op::LD(
-                Operand::IndirectOffsetRegister(Register::C, IO_REGISTER_OFFSET),
-                Operand::Register(Register::A),
+            0xE2 => Ok(Op::LD(
+                Destination::Indexed(Target::Register(Register::C), IO_REGISTER_OFFSET),
+                Source::Direct(Target::Register(Register::A)),
             )),
 
-            // LD A, (HLD)
-            0x3a => Ok(Op::LD(
-                Operand::Register(Register::A),
-                Operand::IndirectRegister(Register::HLD),
+            // LD A, (HL-)
+            0x3A => Ok(Op::LD(
+                Destination::Direct(Target::Register(Register::A)),
+                Source::Indirect(Target::Register(Register::HLD)),
             )),
 
-            // LD (HLD), A
+            // LD (HL-), A
             0x32 => Ok(Op::LD(
-                Operand::IndirectRegister(Register::HLD),
-                Operand::Register(Register::A),
+                Destination::Indirect(Target::Register(Register::HLD)),
+                Source::Direct(Target::Register(Register::A)),
             )),
 
             // LD A, (HLI)
-            0x2a => Ok(Op::LD(
-                Operand::Register(Register::A),
-                Operand::IndirectRegister(Register::HLI),
+            0x2A => Ok(Op::LD(
+                Destination::Direct(Target::Register(Register::A)),
+                Source::Indirect(Target::Register(Register::HLI)),
             )),
 
             // LD (HLI), A
             0x22 => Ok(Op::LD(
-                Operand::IndirectRegister(Register::HLI),
-                Operand::Register(Register::A),
+                Destination::Indirect(Target::Register(Register::HLI)),
+                Source::Direct(Target::Register(Register::A)),
             )),
 
             // LD ($FF00 + n), A
-            0xe0 => {
-                let n = self.mmu.byte(self.pc)? as u16;
+            0xE0 => {
+                let n = self.byte()? as u16;
                 Ok(Op::LD(
-                    Operand::OffsetWord(n, IO_REGISTER_OFFSET),
-                    Operand::Register(Register::A),
+                    Destination::Indexed(Target::Address(n), IO_REGISTER_OFFSET),
+                    Source::Direct(Target::Register(Register::A)),
                 ))
             }
 
             // LD A, ($FF00 + n)
-            0xf0 => {
-                let value = self.mmu.byte(self.pc)? as u16;
+            0xF0 => {
+                let value = self.byte()? as u16;
                 Ok(Op::LD(
-                    Operand::Register(Register::A),
-                    Operand::OffsetWord(value, IO_REGISTER_OFFSET),
+                    Destination::Direct(Target::Register(Register::A)),
+                    Source::Indexed(Target::Address(value), IO_REGISTER_OFFSET),
                 ))
             }
 
             // LD $n, $nn
             0x11 => {
-                let value = self.mmu.word(self.pc)?;
+                let value = self.word()?;
                 Ok(Op::LD(
-                    Operand::Register(Register::DE),
-                    Operand::Word(value),
+                    Destination::Direct(Target::Register(Register::DE)),
+                    Source::Immediate16(value),
                 ))
             }
 
             0x21 => {
-                let value = self.mmu.word(self.pc)?;
+                let value = self.word()?;
                 Ok(Op::LD(
-                    Operand::Register(Register::HL),
-                    Operand::Word(value),
+                    Destination::Direct(Target::Register(Register::HL)),
+                    Source::Immediate16(value),
                 ))
             }
 
             0x31 => {
-                let value = self.mmu.word(self.pc + 1)?;
+                let value = self.word()?;
                 Ok(Op::LD(
-                    Operand::Register(Register::SP),
-                    Operand::Word(value),
+                    Destination::Direct(Target::Register(Register::SP)),
+                    Source::Immediate16(value),
                 ))
             }
 
             // LD SP,HL
-            0xf9 => Ok(Op::LD(
-                Operand::Register(Register::SP),
-                Operand::Register(Register::HL),
+            0xF9 => Ok(Op::LD(
+                Destination::Direct(Target::Register(Register::SP)),
+                Source::Direct(Target::Register(Register::HL)),
             )),
 
             // LD HL, SP+n
-            0xf8 => {
-                let value = self.mmu.byte(self.pc + 1)? as u16;
+            0xF8 => {
+                let value = self.byte()? as u16;
                 Ok(Op::LD(
-                    Operand::Register(Register::HL),
-                    Operand::IndirectOffsetRegister(Register::SP, value),
+                    Destination::Direct(Target::Register(Register::HL)),
+                    Source::Indexed(Target::Register(Register::SP), value),
                 ))
             }
 
             // LD (nn), SP
             0x08 => {
-                let value = self.mmu.word(self.pc + 1)?;
+                let value = self.word()?;
                 Ok(Op::LD(
-                    Operand::Word(value),
-                    Operand::Register(Register::SP),
+                    Destination::Direct(Target::Address(value)),
+                    Source::Direct(Target::Register(Register::SP)),
                 ))
             }
 
