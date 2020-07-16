@@ -55,7 +55,9 @@ pub enum Target {
 #[derive(Debug)]
 pub enum Op {
     NOP,
+    PREFIX, // 0xCB
     LD(Destination, Source), // Load Operand 2 into Operand 1
+    XOR(Destination, Source),
 }
 pub struct Cpu {
     mmu: Mmu,
@@ -76,6 +78,9 @@ pub struct Cpu {
     // TODO: Make pc private
     pub pc: usize,
     sp: usize,
+
+    // PREFIX, 0xCB
+    cb: bool,
 }
 
 impl Cpu {
@@ -95,17 +100,19 @@ impl Cpu {
             stack: [0usize; 16],
             pc: 0,
             sp: 0,
+            cb: false,
         }
     }
 
-    pub fn hl(&self) -> usize {
-        (((self.h as u16) << 8) + self.l as u16) as usize
-    }
+    // pub fn hl(&self) -> usize {
+    //     (((self.h as u16) << 8) + self.l as u16) as usize
+    // }
 
-    pub fn write_hl(&mut self, value: u16) {
-        self.l = (value & 0x0F) as u8;
-        self.h = ((value & 0xF0) >> 8) as u8;
-    }
+    // pub fn write_hl(&mut self, value: u16) {
+    //     self.l = (value & 0x0F) as u8;
+    //     self.h = ((value & 0xF0) >> 8) as u8;
+    // }
+
     pub fn byte(&mut self) -> Result<u8, GBError> {
         let value = self.mmu.byte(self.pc)?;
         self.pc += 1;
@@ -120,6 +127,11 @@ impl Cpu {
 
     pub fn read_instruction(&mut self) -> Result<Op, GBError> {
         let op = self.byte()?;
+
+        if self.cb {
+            self.match_cb(op)?;
+            self.cb = false
+        }
 
         match op {
             0x00 => Ok(Op::NOP),
@@ -607,8 +619,24 @@ impl Cpu {
                 ))
             }
 
+            0xAF => {
+                Ok(Op::XOR(
+                    Destination::Direct(Target::Register(Register::A)),
+                    Source::Direct(Target::Register(Register::A)),
+                ))
+            }
+
+            0xCB => {
+                self.cb = true;
+                Ok(Op::PREFIX)
+            }
+
             _ => Err(GBError::UnknownOperation(op)),
         }
+    }
+
+    fn match_cb(&mut self, op: u8) -> Result<Op, GBError> {
+        Err(GBError::UnknownOperation(op))
     }
 
     pub fn execute_instruction(&mut self, instruction: Op) {}
