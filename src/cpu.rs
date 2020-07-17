@@ -26,17 +26,6 @@ static DEFAULT_SRC_REGISTER_ORDER: [Source; 8] = [
     Source::Direct(Target::Register(Register::A)),
 ];
 
-// The source register order for the majority of LD operations
-static DEFAULT_LD_SRC_REGISTER_ORDER: [Source; 7] = [
-    Source::Direct(Target::Register(Register::B)),
-    Source::Direct(Target::Register(Register::C)),
-    Source::Direct(Target::Register(Register::D)),
-    Source::Direct(Target::Register(Register::E)),
-    Source::Direct(Target::Register(Register::H)),
-    Source::Direct(Target::Register(Register::L)),
-    Source::Indirect(Target::Register(Register::HL)),
-];
-
 #[derive(Debug)]
 pub enum ProgramCounter {
     Next,
@@ -88,10 +77,10 @@ pub enum Target {
 
 #[derive(Debug, Copy, Clone)]
 pub enum Flag {
-    NZ,   // Not Zero
-    NC,   // No Carry
-    Z,    // Zero
-    C,    // Carry
+    NZ, // Not Zero
+    NC, // No Carry
+    Z,  // Zero
+    C,  // Carry
 }
 
 #[derive(Debug)]
