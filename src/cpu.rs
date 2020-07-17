@@ -86,10 +86,8 @@ pub enum Target {
     Address(u16),
 }
 
-// Conditionals used for e.g. JR, CALL, RET
 #[derive(Debug, Copy, Clone)]
-pub enum Conditional {
-    None, // No conditional
+pub enum Flag {
     NZ,   // Not Zero
     NC,   // No Carry
     Z,    // Zero
@@ -115,9 +113,9 @@ pub enum Op {
     PREFIX, // 0xCB
     PUSH(Register),
     POP(Register),
-    CALL(Conditional, u16),
-    RET(Conditional),
-    JR(Conditional, i8),
+    CALL(Option<Flag>, u16),
+    RET(Option<Flag>),
+    JR(Option<Flag>, i8),
     INC(Destination),
     DEC(Destination),
     LD(Destination, Source), // Load Operand 2 into Operand 1
@@ -244,11 +242,11 @@ impl Cpu {
             0xf5 => Ok(Op::PUSH(Register::AF)),
 
             // RET
-            0xc0 => Ok(Op::RET(Conditional::NZ)),
-            0xd0 => Ok(Op::RET(Conditional::NC)),
-            0xc8 => Ok(Op::RET(Conditional::Z)),
-            0xd8 => Ok(Op::RET(Conditional::C)),
-            0xc9 => Ok(Op::RET(Conditional::None)),
+            0xc0 => Ok(Op::RET(Some(Flag::NZ))),
+            0xd0 => Ok(Op::RET(Some(Flag::NC))),
+            0xc8 => Ok(Op::RET(Some(Flag::Z))),
+            0xd8 => Ok(Op::RET(Some(Flag::C))),
+            0xc9 => Ok(Op::RET(None)),
             0xd9 => Ok(Op::RETI),
 
             0x01 => {
@@ -637,57 +635,57 @@ impl Cpu {
             // JR, i8
             0x18 => {
                 let value = self.byte()? as i8;
-                Ok(Op::JR(Conditional::None, value))
+                Ok(Op::JR(None, value))
             }
 
             // JR NZ, i8
             0x20 => {
                 let value = self.byte()? as i8;
-                Ok(Op::JR(Conditional::NZ, value))
+                Ok(Op::JR(Some(Flag::NZ), value))
             }
 
             // JR NC, i8
             0x30 => {
                 let value = self.byte()? as i8;
-                Ok(Op::JR(Conditional::NC, value))
+                Ok(Op::JR(Some(Flag::NC), value))
             }
 
             // JR Z, i8
             0x28 => {
                 let value = self.byte()? as i8;
-                Ok(Op::JR(Conditional::Z, value))
+                Ok(Op::JR(Some(Flag::Z), value))
             }
 
             // JR C, i8
             0x38 => {
                 let value = self.byte()? as i8;
-                Ok(Op::JR(Conditional::C, value))
+                Ok(Op::JR(Some(Flag::C), value))
             }
 
             // CALL $cond, u16
             0xc4 => {
                 let value = self.word()?;
-                Ok(Op::CALL(Conditional::NZ, value))
+                Ok(Op::CALL(Some(Flag::NZ), value))
             }
 
             0xd4 => {
                 let value = self.word()?;
-                Ok(Op::CALL(Conditional::NC, value))
+                Ok(Op::CALL(Some(Flag::NC), value))
             }
 
             0xcc => {
                 let value = self.word()?;
-                Ok(Op::CALL(Conditional::Z, value))
+                Ok(Op::CALL(Some(Flag::Z), value))
             }
 
             0xdc => {
                 let value = self.word()?;
-                Ok(Op::CALL(Conditional::C, value))
+                Ok(Op::CALL(Some(Flag::C), value))
             }
 
             0xcd => {
                 let value = self.word()?;
-                Ok(Op::CALL(Conditional::None, value))
+                Ok(Op::CALL(None, value))
             }
 
             // ADC A, u8
