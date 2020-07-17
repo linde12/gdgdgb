@@ -118,6 +118,7 @@ pub enum Op {
     OR(Destination, Source),
     XOR(Destination, Source),
     CP(Destination, Source),
+    RST(u8),
     RLC(Destination),
     RRC(Destination),
     RL(Destination),
@@ -241,6 +242,18 @@ impl Cpu {
             0xd8 => Ok(Op::RET(Some(Flag::C))),
             0xc9 => Ok(Op::RET(None)),
             0xd9 => Ok(Op::RETI),
+
+            // RST 00h..30h
+            0xc7 => Ok(Op::RST(0x00)),
+            0xd7 => Ok(Op::RST(0x10)),
+            0xe7 => Ok(Op::RST(0x20)),
+            0xf7 => Ok(Op::RST(0x30)),
+
+            // RST 08h..38h
+            0xcf => Ok(Op::RST(0x08)),
+            0xdf => Ok(Op::RST(0x18)),
+            0xef => Ok(Op::RST(0x28)),
+            0xff => Ok(Op::RST(0x38)),
 
             0x01 => {
                 let value = self.word()?;
@@ -767,6 +780,7 @@ impl Cpu {
                     Source::Indexed(Target::Register(Register::SP), value),
                 ))
             }
+
             0xCB => {
                 self.cb = true;
                 Ok(Op::PREFIX)
