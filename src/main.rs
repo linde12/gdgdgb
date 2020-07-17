@@ -25,7 +25,7 @@ fn main() -> anyhow::Result<()> {
     match cmd.as_str() {
         "d" | "disassemble" | "disasm" => loop {
             let op = cpu.read_instruction()?;
-            println!("{:#x}\t{:?}", cpu.pc, op);
+            println!("{:#06x}\t{:02x?}", cpu.pc, op);
         },
         "r" | "run" => loop {
             let op = cpu.read_instruction()?;
