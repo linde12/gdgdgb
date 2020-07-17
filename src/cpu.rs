@@ -108,7 +108,9 @@ pub enum Op {
     INC(Destination),
     DEC(Destination),
     LD(Destination, Source), // Load Operand 2 into Operand 1
+    LDi8(Destination, Source),
     ADD(Destination, Source),
+    ADDi8(Register, i8),
     ADC(Destination, Source),
     SUB(Destination, Source),
     SBC(Destination, Source),
@@ -125,6 +127,8 @@ pub enum Op {
     SWAP(Destination),
     SRL(Destination),
     BIT(u8, Source),
+    RES(u8, Source),
+    SET(u8, Source),
 }
 pub struct Cpu {
     mmu: Mmu,
@@ -750,25 +754,19 @@ impl Cpu {
             }
 
             // ADD SP, i8
-            // TODO: Refactor to actually use signed int
             0xe8 => {
-                let value = self.byte()?;
-                Ok(Op::ADD(
-                    Destination::Direct(Target::Register(Register::SP)),
-                    Source::Immediate8(value),
-                ))
+                let value = self.byte()? as i8;
+                Ok(Op::ADDi8(Register::SP, value))
             }
 
             // LD HL, SP+i8
-            // TODO: Refactor to actually use signed int
-            // Additions to Source needed to represent Register value + immediate value
-            // 0xfa => {
-            //     let value = self.byte()?;
-            //     Ok(Op::LD(
-            //         Destination::Direct(Target::Register(Register::HL)),
-            //         Source::Direct(Target::Register(Register::SP)) // + value here
-            //     ))
-            // }
+            0xfa => {
+                let value = self.byte()? as u16;
+                Ok(Op::LDi8(
+                    Destination::Direct(Target::Register(Register::HL)),
+                    Source::Indexed(Target::Register(Register::SP), value),
+                ))
+            }
             0xCB => {
                 self.cb = true;
                 Ok(Op::PREFIX)
@@ -836,63 +834,38 @@ impl Cpu {
                 Ok(Op::SRL(reg))
             }
 
-            // BIT 0, B->A
-            0x40..=0x47 => {
-                let low = op & 0x0F;
-                let reg = DEFAULT_SRC_REGISTER_ORDER[low as usize];
-                Ok(Op::BIT(0, reg))
+            // BIT index, $n
+            0x40..=0x7f => {
+                // increment index in 8 step intervals, starting from 0
+                let dst_index = ((op - 0x40) / 8) as u8;
+
+                // use low nibble as source index
+                let src_index = ((op & 0x0F) % 8) as usize;
+
+                Ok(Op::BIT(dst_index, DEFAULT_SRC_REGISTER_ORDER[src_index]))
             }
 
-            // BIT 1, B->A
-            0x48..=0x4F => {
-                let low = op & 0x0F - 8;
-                let reg = DEFAULT_SRC_REGISTER_ORDER[low as usize];
-                Ok(Op::BIT(1, reg))
+            // RES index, $n
+            0x80..=0xbf => {
+                // increment index in 8 step intervals, starting from 0
+                let dst_index = ((op - 0x80) / 8) as u8;
+
+                // use low nibble as source index
+                let src_index = ((op & 0x0F) % 8) as usize;
+
+                Ok(Op::RES(dst_index, DEFAULT_SRC_REGISTER_ORDER[src_index]))
             }
 
-            // BIT 2, B->A
-            0x50..=0x57 => {
-                let low = op & 0x0F;
-                let reg = DEFAULT_SRC_REGISTER_ORDER[low as usize];
-                Ok(Op::BIT(2, reg))
-            }
+            // SET index, $n
+            0xc0..=0xff => {
+                // increment index in 8 step intervals, starting from 0
+                let dst_index = ((op - 0xc0) / 8) as u8;
 
-            // BIT 3, B->A
-            0x58..=0x5F => {
-                let low = op & 0x0F - 8;
-                let reg = DEFAULT_SRC_REGISTER_ORDER[low as usize];
-                Ok(Op::BIT(3, reg))
-            }
+                // use low nibble as source index
+                let src_index = ((op & 0x0F) % 8) as usize;
 
-            // BIT 4, B->A
-            0x60..=0x67 => {
-                let low = op & 0x0F;
-                let reg = DEFAULT_SRC_REGISTER_ORDER[low as usize];
-                Ok(Op::BIT(4, reg))
+                Ok(Op::SET(dst_index, DEFAULT_SRC_REGISTER_ORDER[src_index]))
             }
-
-            // BIT 5, B->A
-            0x68..=0x6F => {
-                let low = op & 0x0F - 8;
-                let reg = DEFAULT_SRC_REGISTER_ORDER[low as usize];
-                Ok(Op::BIT(5, reg))
-            }
-
-            // BIT 6, B->A
-            0x70..=0x77 => {
-                let low = op & 0x0F;
-                let reg = DEFAULT_SRC_REGISTER_ORDER[low as usize];
-                Ok(Op::BIT(6, reg))
-            }
-
-            // BIT 7, B->A
-            0x78..=0x7F => {
-                let low = op & 0x0F - 8;
-                let reg = DEFAULT_SRC_REGISTER_ORDER[low as usize];
-                Ok(Op::BIT(7, reg))
-            }
-
-            _ => Err(GBError::UnknownOperation(op)),
         }
     }
 
