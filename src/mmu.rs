@@ -26,26 +26,26 @@ impl Mmu {
         }
     }
 
-    pub fn byte(&self, index: usize) -> Result<u8, GBError> {
+    pub fn byte(&self, index: usize) -> u8 {
         match index {
-            0x0000 ..= 0x7FFF => Ok(self.rom[index]),
-            0x8000 ..= 0x9FFF => Ok(self.vram[index - 0x8000]),
-            0xA000 ..= 0xBFFF => Ok(self.ext_ram[index - 0xA000]),
-            0xC000 ..= 0xDFFF => Ok(self.ram[index - 0xC000]),
-            0xFE00 ..= 0xFE9F => Ok(self.oam[index - 0xFE00]),
-            0xFF00 ..= 0xFF7F => Ok(self.io[index - 0xFF00]),
-            0xFF80 ..= 0xFFFE => Ok(self.hram[index - 0xFF80]),
-            0xFFFF => Ok(self.ie),
-            _ => Err(GBError::ReadByte),
+            0x0000 ..= 0x7FFF => self.rom[index],
+            0x8000 ..= 0x9FFF => self.vram[index - 0x8000],
+            0xA000 ..= 0xBFFF => self.ext_ram[index - 0xA000],
+            0xC000 ..= 0xDFFF => self.ram[index - 0xC000],
+            0xFE00 ..= 0xFE9F => self.oam[index - 0xFE00],
+            0xFF00 ..= 0xFF7F => self.io[index - 0xFF00],
+            0xFF80 ..= 0xFFFE => self.hram[index - 0xFF80],
+            0xFFFF => self.ie,
+            _ => 0xFF, // default to 0xFF
         }
     }
 
-    pub fn word(&self, index: usize) -> Result<u16, GBError> {
-        let first = self.byte(index)?;
-        let second = self.byte(index + 1)?;
+    pub fn word(&self, index: usize) -> usize {
+        let first = self.byte(index);
+        let second = self.byte(index + 1);
 
         // little-endian, least significant bit comes first, hence | and << 8
-        Ok((first as u16) | ((second as u16) << 8))
+        (first as usize) | ((second as usize) << 8)
     }
 
     pub fn write_byte(&mut self, index: usize, b: u8) -> Result<(), GBError> {
@@ -62,7 +62,7 @@ impl Mmu {
         }
     }
 
-    pub fn write_word(&mut self, index: usize, w: u16) -> Result<(), GBError> {
+    pub fn write_word(&mut self, index: usize, w: usize) -> Result<(), GBError> {
         self.write_byte(index, (w & 0xFF) as u8)?;
         self.write_byte(index, (w >> 8) as u8)?;
         Ok(())
