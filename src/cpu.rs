@@ -26,6 +26,17 @@ static DEFAULT_SRC_REGISTER_ORDER: [Source; 8] = [
     Source::Direct(Target::Register(Register::A)),
 ];
 
+// The source register order for the majority of LD operations
+static DEFAULT_LD_SRC_REGISTER_ORDER: [Source; 7] = [
+    Source::Direct(Target::Register(Register::B)),
+    Source::Direct(Target::Register(Register::C)),
+    Source::Direct(Target::Register(Register::D)),
+    Source::Direct(Target::Register(Register::E)),
+    Source::Direct(Target::Register(Register::H)),
+    Source::Direct(Target::Register(Register::L)),
+    Source::Indirect(Target::Register(Register::HL)),
+];
+
 #[derive(Debug)]
 pub enum ProgramCounter {
     Next,
@@ -217,7 +228,6 @@ impl Cpu {
             0x3f => Ok(Op::CCF),
             0x27 => Ok(Op::DAA),
             0x37 => Ok(Op::SCF),
-            0x76 => Ok(Op::HALT),
             0xf3 => Ok(Op::DI),
             0xfb => Ok(Op::EI),
 
@@ -305,289 +315,23 @@ impl Cpu {
                 ))
             }
 
-            // LD A, x
-            0x7F => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::A)),
-                Source::Direct(Target::Register(Register::A)),
-            )),
-            0x78 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::A)),
-                Source::Direct(Target::Register(Register::B)),
-            )),
-            0x79 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::A)),
-                Source::Direct(Target::Register(Register::C)),
-            )),
-            0x7A => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::A)),
-                Source::Direct(Target::Register(Register::D)),
-            )),
-            0x7B => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::A)),
-                Source::Direct(Target::Register(Register::E)),
-            )),
-            0x7C => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::A)),
-                Source::Direct(Target::Register(Register::H)),
-            )),
-            0x7D => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::A)),
-                Source::Direct(Target::Register(Register::L)),
-            )),
-            0x7E => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::A)),
-                Source::Indirect(Target::Register(Register::HL)),
-            )),
+            // LD x, x
+            0x40..=0x7f => {
+                // Exception for address 0x76, which is HALT
+                if op == 0x76 {
+                    return Ok(Op::HALT);
+                }
+                // increment index in 8 step intervals, starting from 0
+                let dst_index = ((op - 0x40) / 8) as usize;
 
-            // LD B, x
-            0x40..=0x46 => {
-                let register_order: [Source; 7] = [
-                    Source::Direct(Target::Register(Register::B)),
-                    Source::Direct(Target::Register(Register::C)),
-                    Source::Direct(Target::Register(Register::D)),
-                    Source::Direct(Target::Register(Register::E)),
-                    Source::Direct(Target::Register(Register::H)),
-                    Source::Direct(Target::Register(Register::L)),
-                    Source::Indirect(Target::Register(Register::HL)),
-                ];
-
-                let index = (op & 0x0F) as usize;
+                // use low nibble as source index
+                let src_index = ((op & 0x0F) % 8) as usize;
 
                 Ok(Op::LD(
-                    Destination::Direct(Target::Register(Register::B)),
-                    register_order[index],
+                    DEFAULT_DST_REGISTER_ORDER[dst_index],
+                    DEFAULT_SRC_REGISTER_ORDER[src_index],
                 ))
             }
-
-            // LD C, x
-            0x48 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::C)),
-                Source::Direct(Target::Register(Register::B)),
-            )),
-            0x49 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::C)),
-                Source::Direct(Target::Register(Register::C)),
-            )),
-            0x4A => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::C)),
-                Source::Direct(Target::Register(Register::D)),
-            )),
-            0x4B => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::C)),
-                Source::Direct(Target::Register(Register::E)),
-            )),
-            0x4C => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::C)),
-                Source::Direct(Target::Register(Register::H)),
-            )),
-            0x4D => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::C)),
-                Source::Direct(Target::Register(Register::L)),
-            )),
-            0x4E => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::C)),
-                Source::Indirect(Target::Register(Register::HL)),
-            )),
-
-            // LD D, x
-            0x50 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::D)),
-                Source::Direct(Target::Register(Register::B)),
-            )),
-
-            0x51 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::D)),
-                Source::Direct(Target::Register(Register::C)),
-            )),
-
-            0x52 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::D)),
-                Source::Direct(Target::Register(Register::D)),
-            )),
-
-            0x53 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::D)),
-                Source::Direct(Target::Register(Register::E)),
-            )),
-
-            0x54 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::D)),
-                Source::Direct(Target::Register(Register::H)),
-            )),
-
-            0x55 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::D)),
-                Source::Direct(Target::Register(Register::L)),
-            )),
-
-            0x56 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::D)),
-                Source::Indirect(Target::Register(Register::HL)),
-            )),
-
-            // LD E, x
-            0x58 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::E)),
-                Source::Direct(Target::Register(Register::B)),
-            )),
-            0x59 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::E)),
-                Source::Direct(Target::Register(Register::C)),
-            )),
-            0x5A => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::E)),
-                Source::Direct(Target::Register(Register::E)),
-            )),
-            0x5B => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::E)),
-                Source::Direct(Target::Register(Register::E)),
-            )),
-            0x5C => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::E)),
-                Source::Direct(Target::Register(Register::H)),
-            )),
-            0x5D => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::E)),
-                Source::Direct(Target::Register(Register::L)),
-            )),
-            0x5E => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::E)),
-                Source::Indirect(Target::Register(Register::HL)),
-            )),
-
-            // LD H, x
-            0x60 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::H)),
-                Source::Direct(Target::Register(Register::B)),
-            )),
-
-            0x61 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::H)),
-                Source::Direct(Target::Register(Register::C)),
-            )),
-
-            0x62 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::H)),
-                Source::Direct(Target::Register(Register::D)),
-            )),
-
-            0x63 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::H)),
-                Source::Direct(Target::Register(Register::E)),
-            )),
-
-            0x64 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::H)),
-                Source::Direct(Target::Register(Register::H)),
-            )),
-
-            0x65 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::H)),
-                Source::Direct(Target::Register(Register::L)),
-            )),
-
-            0x66 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::H)),
-                Source::Indirect(Target::Register(Register::HL)),
-            )),
-
-            // LD L, x
-            0x68 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::L)),
-                Source::Direct(Target::Register(Register::B)),
-            )),
-
-            0x69 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::L)),
-                Source::Direct(Target::Register(Register::C)),
-            )),
-
-            0x6a => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::L)),
-                Source::Direct(Target::Register(Register::D)),
-            )),
-
-            0x6b => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::L)),
-                Source::Direct(Target::Register(Register::E)),
-            )),
-
-            0x6c => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::L)),
-                Source::Direct(Target::Register(Register::H)),
-            )),
-
-            0x6d => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::L)),
-                Source::Direct(Target::Register(Register::L)),
-            )),
-
-            0x6e => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::L)),
-                Source::Indirect(Target::Register(Register::HL)),
-            )),
-
-            // LD (HL), x
-            0x70 => Ok(Op::LD(
-                Destination::Indirect(Target::Register(Register::HL)),
-                Source::Direct(Target::Register(Register::B)),
-            )),
-
-            0x71 => Ok(Op::LD(
-                Destination::Indirect(Target::Register(Register::HL)),
-                Source::Direct(Target::Register(Register::C)),
-            )),
-
-            0x72 => Ok(Op::LD(
-                Destination::Indirect(Target::Register(Register::HL)),
-                Source::Direct(Target::Register(Register::D)),
-            )),
-
-            0x73 => Ok(Op::LD(
-                Destination::Indirect(Target::Register(Register::HL)),
-                Source::Direct(Target::Register(Register::E)),
-            )),
-
-            0x74 => Ok(Op::LD(
-                Destination::Indirect(Target::Register(Register::HL)),
-                Source::Direct(Target::Register(Register::H)),
-            )),
-
-            0x75 => Ok(Op::LD(
-                Destination::Indirect(Target::Register(Register::HL)),
-                Source::Direct(Target::Register(Register::L)),
-            )),
-
-            // LD n, A
-            0x47 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::B)),
-                Source::Direct(Target::Register(Register::A)),
-            )),
-
-            0x4f => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::C)),
-                Source::Direct(Target::Register(Register::A)),
-            )),
-
-            0x57 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::D)),
-                Source::Direct(Target::Register(Register::A)),
-            )),
-
-            0x5f => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::E)),
-                Source::Direct(Target::Register(Register::A)),
-            )),
-
-            0x67 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::H)),
-                Source::Direct(Target::Register(Register::A)),
-            )),
-
-            0x6f => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::L)),
-                Source::Direct(Target::Register(Register::A)),
-            )),
 
             0x02 => Ok(Op::LD(
                 Destination::Indirect(Target::Register(Register::BC)),
@@ -596,11 +340,6 @@ impl Cpu {
 
             0x12 => Ok(Op::LD(
                 Destination::Indirect(Target::Register(Register::DE)),
-                Source::Direct(Target::Register(Register::A)),
-            )),
-
-            0x77 => Ok(Op::LD(
-                Destination::Indirect(Target::Register(Register::HL)),
                 Source::Direct(Target::Register(Register::A)),
             )),
 
