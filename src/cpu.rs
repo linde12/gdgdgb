@@ -1,29 +1,30 @@
 use crate::error::GBError;
 use crate::mmu::Mmu;
+use crate::register::{Register, RegisterType, Flag};
 
-const IO_REGISTER_OFFSET: u16 = 0xff00;
+const IO_REGISTER_OFFSET: usize = 0xff00;
 
 // Used to algorithmically parse opcode ranges
 static DEFAULT_DST_REGISTER_ORDER: [Destination; 8] = [
-    Destination::Direct(Target::Register(Register::B)),
-    Destination::Direct(Target::Register(Register::C)),
-    Destination::Direct(Target::Register(Register::D)),
-    Destination::Direct(Target::Register(Register::E)),
-    Destination::Direct(Target::Register(Register::H)),
-    Destination::Direct(Target::Register(Register::L)),
-    Destination::Indirect(Target::Register(Register::HL)), // (HL)
-    Destination::Direct(Target::Register(Register::A)),
+    Destination::Direct(Target::Register(RegisterType::B)),
+    Destination::Direct(Target::Register(RegisterType::C)),
+    Destination::Direct(Target::Register(RegisterType::D)),
+    Destination::Direct(Target::Register(RegisterType::E)),
+    Destination::Direct(Target::Register(RegisterType::H)),
+    Destination::Direct(Target::Register(RegisterType::L)),
+    Destination::Indirect(Target::Register(RegisterType::HL)), // (HL)
+    Destination::Direct(Target::Register(RegisterType::A)),
 ];
 
 static DEFAULT_SRC_REGISTER_ORDER: [Source; 8] = [
-    Source::Direct(Target::Register(Register::B)),
-    Source::Direct(Target::Register(Register::C)),
-    Source::Direct(Target::Register(Register::D)),
-    Source::Direct(Target::Register(Register::E)),
-    Source::Direct(Target::Register(Register::H)),
-    Source::Direct(Target::Register(Register::L)),
-    Source::Indirect(Target::Register(Register::HL)), // (HL)
-    Source::Direct(Target::Register(Register::A)),
+    Source::Direct(Target::Register(RegisterType::B)),
+    Source::Direct(Target::Register(RegisterType::C)),
+    Source::Direct(Target::Register(RegisterType::D)),
+    Source::Direct(Target::Register(RegisterType::E)),
+    Source::Direct(Target::Register(RegisterType::H)),
+    Source::Direct(Target::Register(RegisterType::L)),
+    Source::Indirect(Target::Register(RegisterType::HL)), // (HL)
+    Source::Direct(Target::Register(RegisterType::A)),
 ];
 
 #[derive(Debug)]
@@ -37,7 +38,7 @@ pub enum ProgramCounter {
 pub enum Destination {
     Direct(Target),       // Direct value, either a register or u16 address
     Indirect(Target),     // A pointer to an address, either from register or an address location
-    Indexed(Target, u16), // Value of target+offset, where target can be a value in a register or a u16 and offset is a u16
+    Indexed(Target, usize), // Value of target+offset, where target can be a value in a register or a u16 and offset is a u16
 }
 
 // See https://www.cs.helsinki.fi/u/kerola/tito/koksi_doc/memaddr.html
@@ -47,40 +48,18 @@ pub enum Source {
     Immediate16(u16),
     Direct(Target),       // Direct value, either a register or u16 address
     Indirect(Target),     // A pointer to an address, either from register or an address location
-    Indexed(Target, u16), // Value of target+offset, where target can be a value in a register or a u16 and offset is a u16
-}
-
-#[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
-pub enum Register {
-    A,
-    B,
-    C,
-    D,
-    E,
-    F, // Holds CPU Flags
-    H,
-    L,
-    AF,
-    BC,
-    DE,
-    HL,
-    HLD, // Not an actual register, HL Decrement (HL-)
-    HLI, // Not an actual register, HL Increment (HL+)
-    SP,
+    Indexed(Target, usize), // Value of target+offset, where target can be a value in a register or a u16 and offset is a u16
 }
 
 #[derive(Debug, Copy, Clone)]
 pub enum Target {
-    Register(Register),
-    Address(u16),
+    Register(RegisterType),
+    Address(usize),
 }
 
-#[derive(Debug, Copy, Clone)]
-pub enum Flag {
-    NZ, // Not Zero
-    NC, // No Carry
-    Z,  // Zero
-    C,  // Carry
+pub enum ByteOrWord {
+    Byte(u8),
+    Word(u16),
 }
 
 #[derive(Debug)]
@@ -100,8 +79,8 @@ pub enum Op {
     EI,
     RETI,   // Enables interrupts after return operation
     PREFIX, // 0xCB
-    PUSH(Register),
-    POP(Register),
+    PUSH(RegisterType),
+    POP(RegisterType),
     CALL(Option<Flag>, u16),
     RET(Option<Flag>),
     JR(Option<Flag>, i8),
@@ -110,7 +89,7 @@ pub enum Op {
     LD(Destination, Source), // Load Operand 2 into Operand 1
     LDi8(Destination, Source),
     ADD(Destination, Source),
-    ADDi8(Register, i8),
+    ADDi8(RegisterType, i8),
     ADC(Destination, Source),
     SUB(Destination, Source),
     SBC(Destination, Source),
@@ -133,24 +112,8 @@ pub enum Op {
 }
 pub struct Cpu {
     mmu: Mmu,
-    // general purpose registers
-    v: [u8; 16],
-    a: u8,
-    b: u8,
-    c: u8,
-    d: u8,
-    e: u8,
-    f: u8,
-    h: u8,
-    l: u8,
-    // address store register
-    i: usize,
-
+    reg: Register,
     stack: [usize; 16],
-    // TODO: Make pc private
-    pub pc: usize,
-    sp: usize,
-
     // PREFIX, 0xCB
     cb: bool,
 }
@@ -158,20 +121,9 @@ pub struct Cpu {
 impl Cpu {
     pub fn new(mmu: Mmu) -> Cpu {
         Cpu {
-            a: 0,
-            b: 0,
-            c: 0,
-            d: 0,
-            e: 0,
-            f: 0,
-            h: 0,
-            l: 0,
+            reg: Register::new(),
             mmu,
-            v: [0u8; 16],
-            i: 0,
             stack: [0usize; 16],
-            pc: 0,
-            sp: 0,
             cb: false,
         }
     }
@@ -184,16 +136,19 @@ impl Cpu {
     //     self.l = (value & 0x0F) as u8;
     //     self.h = ((value & 0xF0) >> 8) as u8;
     // }
+    pub fn pc(&self) -> usize {
+        self.reg.pc
+    }
 
     pub fn byte(&mut self) -> Result<u8, GBError> {
-        let value = self.mmu.byte(self.pc)?;
-        self.pc += 1;
+        let value = self.mmu.byte(self.reg.pc)?;
+        self.reg.pc += 1;
         Ok(value)
     }
 
     pub fn word(&mut self) -> Result<u16, GBError> {
-        let value = self.mmu.word(self.pc)?;
-        self.pc += 2;
+        let value = self.mmu.word(self.reg.pc)?;
+        self.reg.pc += 2;
         Ok(value)
     }
 
@@ -208,7 +163,7 @@ impl Cpu {
         match op {
             0x00 => Ok(Op::NOP),
             0x10 => {
-                self.pc += 1;
+                self.reg.pc += 1;
                 Ok(Op::STOP)
             }
 
@@ -224,16 +179,16 @@ impl Cpu {
             0xfb => Ok(Op::EI),
 
             // POP $n
-            0xc1 => Ok(Op::POP(Register::BC)),
-            0xd1 => Ok(Op::POP(Register::DE)),
-            0xe1 => Ok(Op::POP(Register::HL)),
-            0xf1 => Ok(Op::POP(Register::AF)),
+            0xc1 => Ok(Op::POP(RegisterType::BC)),
+            0xd1 => Ok(Op::POP(RegisterType::DE)),
+            0xe1 => Ok(Op::POP(RegisterType::HL)),
+            0xf1 => Ok(Op::POP(RegisterType::AF)),
 
             // PUSH $n
-            0xc5 => Ok(Op::PUSH(Register::BC)),
-            0xd5 => Ok(Op::PUSH(Register::DE)),
-            0xe5 => Ok(Op::PUSH(Register::HL)),
-            0xf5 => Ok(Op::PUSH(Register::AF)),
+            0xc5 => Ok(Op::PUSH(RegisterType::BC)),
+            0xd5 => Ok(Op::PUSH(RegisterType::DE)),
+            0xe5 => Ok(Op::PUSH(RegisterType::HL)),
+            0xf5 => Ok(Op::PUSH(RegisterType::AF)),
 
             // RET
             0xc0 => Ok(Op::RET(Some(Flag::NZ))),
@@ -258,7 +213,7 @@ impl Cpu {
             0x01 => {
                 let value = self.word()?;
                 Ok(Op::LD(
-                    Destination::Direct(Target::Register(Register::BC)),
+                    Destination::Direct(Target::Register(RegisterType::BC)),
                     Source::Immediate16(value),
                 ))
             }
@@ -266,7 +221,7 @@ impl Cpu {
             0x06 => {
                 let value = self.byte()?;
                 Ok(Op::LD(
-                    Destination::Direct(Target::Register(Register::B)),
+                    Destination::Direct(Target::Register(RegisterType::B)),
                     Source::Immediate8(value),
                 ))
             }
@@ -274,7 +229,7 @@ impl Cpu {
             0x0E => {
                 let value = self.byte()?;
                 Ok(Op::LD(
-                    Destination::Direct(Target::Register(Register::C)),
+                    Destination::Direct(Target::Register(RegisterType::C)),
                     Source::Immediate8(value),
                 ))
             }
@@ -282,7 +237,7 @@ impl Cpu {
             0x16 => {
                 let value = self.byte()?;
                 Ok(Op::LD(
-                    Destination::Direct(Target::Register(Register::D)),
+                    Destination::Direct(Target::Register(RegisterType::D)),
                     Source::Immediate8(value),
                 ))
             }
@@ -290,7 +245,7 @@ impl Cpu {
             0x1E => {
                 let value = self.byte()?;
                 Ok(Op::LD(
-                    Destination::Direct(Target::Register(Register::E)),
+                    Destination::Direct(Target::Register(RegisterType::E)),
                     Source::Immediate8(value),
                 ))
             }
@@ -298,7 +253,7 @@ impl Cpu {
             0x26 => {
                 let value = self.byte()?;
                 Ok(Op::LD(
-                    Destination::Direct(Target::Register(Register::H)),
+                    Destination::Direct(Target::Register(RegisterType::H)),
                     Source::Immediate8(value),
                 ))
             }
@@ -306,7 +261,7 @@ impl Cpu {
             0x36 => {
                 let value = self.byte()?;
                 Ok(Op::LD(
-                    Destination::Indirect(Target::Register(Register::HL)),
+                    Destination::Indirect(Target::Register(RegisterType::HL)),
                     Source::Immediate8(value),
                 ))
             }
@@ -314,7 +269,7 @@ impl Cpu {
             0x2E => {
                 let value = self.byte()?;
                 Ok(Op::LD(
-                    Destination::Direct(Target::Register(Register::L)),
+                    Destination::Direct(Target::Register(RegisterType::L)),
                     Source::Immediate8(value),
                 ))
             }
@@ -338,35 +293,35 @@ impl Cpu {
             }
 
             0x02 => Ok(Op::LD(
-                Destination::Indirect(Target::Register(Register::BC)),
-                Source::Direct(Target::Register(Register::A)),
+                Destination::Indirect(Target::Register(RegisterType::BC)),
+                Source::Direct(Target::Register(RegisterType::A)),
             )),
 
             0x12 => Ok(Op::LD(
-                Destination::Indirect(Target::Register(Register::DE)),
-                Source::Direct(Target::Register(Register::A)),
+                Destination::Indirect(Target::Register(RegisterType::DE)),
+                Source::Direct(Target::Register(RegisterType::A)),
             )),
 
             0xEA => {
-                let value = self.word()?;
+                let value = self.word()? as usize;
                 Ok(Op::LD(
                     Destination::Direct(Target::Address(value)),
-                    Source::Direct(Target::Register(Register::A)),
+                    Source::Direct(Target::Register(RegisterType::A)),
                 ))
             }
 
             // LD A (nn)
             0x0a | 0x1a | 0x2a | 0x3a => {
                 let register_order: [Source; 4] = [
-                    Source::Indirect(Target::Register(Register::BC)),
-                    Source::Indirect(Target::Register(Register::DE)),
-                    Source::Indirect(Target::Register(Register::HLI)),
-                    Source::Indirect(Target::Register(Register::HLD)),
+                    Source::Indirect(Target::Register(RegisterType::BC)),
+                    Source::Indirect(Target::Register(RegisterType::DE)),
+                    Source::Indirect(Target::Register(RegisterType::HLI)),
+                    Source::Indirect(Target::Register(RegisterType::HLD)),
                 ];
                 let index = ((op & 0xF0) >> 4) as usize;
 
                 Ok(Op::LD(
-                    Destination::Direct(Target::Register(Register::A)),
+                    Destination::Direct(Target::Register(RegisterType::A)),
                     register_order[index],
                 ))
             }
@@ -375,7 +330,7 @@ impl Cpu {
             0x3e => {
                 let value = self.byte()?;
                 Ok(Op::LD(
-                    Destination::Direct(Target::Register(Register::A)),
+                    Destination::Direct(Target::Register(RegisterType::A)),
                     Source::Immediate8(value),
                 ))
             }
@@ -383,42 +338,42 @@ impl Cpu {
             // LD A, (C)
             // Same as LD A, (0xff00 + C)
             0xF2 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::A)),
-                Source::Indexed(Target::Register(Register::C), IO_REGISTER_OFFSET),
+                Destination::Direct(Target::Register(RegisterType::A)),
+                Source::Indexed(Target::Register(RegisterType::C), IO_REGISTER_OFFSET),
             )),
 
             // LD (C), A
             // Same as LD (0xff00 + C), A
             0xE2 => Ok(Op::LD(
-                Destination::Indexed(Target::Register(Register::C), IO_REGISTER_OFFSET),
-                Source::Direct(Target::Register(Register::A)),
+                Destination::Indexed(Target::Register(RegisterType::C), IO_REGISTER_OFFSET),
+                Source::Direct(Target::Register(RegisterType::A)),
             )),
             // LD (HL-), A
             0x32 => Ok(Op::LD(
-                Destination::Indirect(Target::Register(Register::HLD)),
-                Source::Direct(Target::Register(Register::A)),
+                Destination::Indirect(Target::Register(RegisterType::HLD)),
+                Source::Direct(Target::Register(RegisterType::A)),
             )),
 
             // LD (HLI), A
             0x22 => Ok(Op::LD(
-                Destination::Indirect(Target::Register(Register::HLI)),
-                Source::Direct(Target::Register(Register::A)),
+                Destination::Indirect(Target::Register(RegisterType::HLI)),
+                Source::Direct(Target::Register(RegisterType::A)),
             )),
 
             // LD ($FF00 + n), A
             0xE0 => {
-                let n = self.byte()? as u16;
+                let n = self.byte()? as usize;
                 Ok(Op::LD(
                     Destination::Indexed(Target::Address(n), IO_REGISTER_OFFSET),
-                    Source::Direct(Target::Register(Register::A)),
+                    Source::Direct(Target::Register(RegisterType::A)),
                 ))
             }
 
             // LD A, ($FF00 + n)
             0xF0 => {
-                let value = self.byte()? as u16;
+                let value = self.byte()? as usize;
                 Ok(Op::LD(
-                    Destination::Direct(Target::Register(Register::A)),
+                    Destination::Direct(Target::Register(RegisterType::A)),
                     Source::Indexed(Target::Address(value), IO_REGISTER_OFFSET),
                 ))
             }
@@ -427,7 +382,7 @@ impl Cpu {
             0x11 => {
                 let value = self.word()?;
                 Ok(Op::LD(
-                    Destination::Direct(Target::Register(Register::DE)),
+                    Destination::Direct(Target::Register(RegisterType::DE)),
                     Source::Immediate16(value),
                 ))
             }
@@ -435,7 +390,7 @@ impl Cpu {
             0x21 => {
                 let value = self.word()?;
                 Ok(Op::LD(
-                    Destination::Direct(Target::Register(Register::HL)),
+                    Destination::Direct(Target::Register(RegisterType::HL)),
                     Source::Immediate16(value),
                 ))
             }
@@ -443,32 +398,32 @@ impl Cpu {
             0x31 => {
                 let value = self.word()?;
                 Ok(Op::LD(
-                    Destination::Direct(Target::Register(Register::SP)),
+                    Destination::Direct(Target::Register(RegisterType::SP)),
                     Source::Immediate16(value),
                 ))
             }
 
             // LD SP,HL
             0xF9 => Ok(Op::LD(
-                Destination::Direct(Target::Register(Register::SP)),
-                Source::Direct(Target::Register(Register::HL)),
+                Destination::Direct(Target::Register(RegisterType::SP)),
+                Source::Direct(Target::Register(RegisterType::HL)),
             )),
 
             // LD HL, SP+n
             0xF8 => {
-                let value = self.byte()? as u16;
+                let value = self.byte()? as usize;
                 Ok(Op::LD(
-                    Destination::Direct(Target::Register(Register::HL)),
-                    Source::Indexed(Target::Register(Register::SP), value),
+                    Destination::Direct(Target::Register(RegisterType::HL)),
+                    Source::Indexed(Target::Register(RegisterType::SP), value),
                 ))
             }
 
             // LD (nn), SP
             0x08 => {
-                let value = self.word()?;
+                let value = self.word()? as usize;
                 Ok(Op::LD(
                     Destination::Direct(Target::Address(value)),
-                    Source::Direct(Target::Register(Register::SP)),
+                    Source::Direct(Target::Register(RegisterType::SP)),
                 ))
             }
 
@@ -476,7 +431,7 @@ impl Cpu {
             0x80..=0x87 => {
                 let index = (op & 0x0F) as usize; // Low nibble will be our index
                 Ok(Op::ADD(
-                    Destination::Direct(Target::Register(Register::A)),
+                    Destination::Direct(Target::Register(RegisterType::A)),
                     DEFAULT_SRC_REGISTER_ORDER[index],
                 ))
             }
@@ -485,7 +440,7 @@ impl Cpu {
             0x88..=0x8F => {
                 let index = ((op & 0x0F) - 8) as usize; // Low nibble with offset -8 will be our index
                 Ok(Op::ADC(
-                    Destination::Direct(Target::Register(Register::A)),
+                    Destination::Direct(Target::Register(RegisterType::A)),
                     DEFAULT_SRC_REGISTER_ORDER[index],
                 ))
             }
@@ -494,7 +449,7 @@ impl Cpu {
             0x90..=0x97 => {
                 let index = (op & 0x0F) as usize; // Low nibble will be our index
                 Ok(Op::SUB(
-                    Destination::Direct(Target::Register(Register::A)),
+                    Destination::Direct(Target::Register(RegisterType::A)),
                     DEFAULT_SRC_REGISTER_ORDER[index],
                 ))
             }
@@ -503,7 +458,7 @@ impl Cpu {
             0x98..=0x9F => {
                 let index = ((op & 0x0F) - 8) as usize; // Low nibble with offset -8 will be our index
                 Ok(Op::SBC(
-                    Destination::Direct(Target::Register(Register::A)),
+                    Destination::Direct(Target::Register(RegisterType::A)),
                     DEFAULT_SRC_REGISTER_ORDER[index],
                 ))
             }
@@ -511,15 +466,15 @@ impl Cpu {
             // AND HL, $nn
             0x09 | 0x19 | 0x29 | 0x39 => {
                 let register_order: [Source; 4] = [
-                    Source::Direct(Target::Register(Register::BC)),
-                    Source::Direct(Target::Register(Register::DE)),
-                    Source::Direct(Target::Register(Register::HL)),
-                    Source::Direct(Target::Register(Register::SP)),
+                    Source::Direct(Target::Register(RegisterType::BC)),
+                    Source::Direct(Target::Register(RegisterType::DE)),
+                    Source::Direct(Target::Register(RegisterType::HL)),
+                    Source::Direct(Target::Register(RegisterType::SP)),
                 ];
 
                 let index = ((op & 0xF0) >> 4) as usize; // High nibble as index
                 Ok(Op::AND(
-                    Destination::Direct(Target::Register(Register::HL)),
+                    Destination::Direct(Target::Register(RegisterType::HL)),
                     register_order[index],
                 ))
             }
@@ -528,7 +483,7 @@ impl Cpu {
             0xA0..=0xA7 => {
                 let index = (op & 0x0F) as usize; // Low nibble will be our index
                 Ok(Op::AND(
-                    Destination::Direct(Target::Register(Register::A)),
+                    Destination::Direct(Target::Register(RegisterType::A)),
                     DEFAULT_SRC_REGISTER_ORDER[index],
                 ))
             }
@@ -537,7 +492,7 @@ impl Cpu {
             0xA8..=0xAF => {
                 let index = ((op & 0x0F) - 8) as usize; // Low nibble with offset -8 will be our index
                 Ok(Op::XOR(
-                    Destination::Direct(Target::Register(Register::A)),
+                    Destination::Direct(Target::Register(RegisterType::A)),
                     DEFAULT_SRC_REGISTER_ORDER[index],
                 ))
             }
@@ -546,7 +501,7 @@ impl Cpu {
             0xB0..=0xB7 => {
                 let index = (op & 0x0F) as usize; // Low nibble will be our index
                 Ok(Op::OR(
-                    Destination::Direct(Target::Register(Register::A)),
+                    Destination::Direct(Target::Register(RegisterType::A)),
                     DEFAULT_SRC_REGISTER_ORDER[index],
                 ))
             }
@@ -555,7 +510,7 @@ impl Cpu {
             0xB8..=0xBF => {
                 let index = ((op & 0x0F) - 8) as usize; // Low nibble with offset -8 will be our index
                 Ok(Op::CP(
-                    Destination::Direct(Target::Register(Register::A)),
+                    Destination::Direct(Target::Register(RegisterType::A)),
                     DEFAULT_SRC_REGISTER_ORDER[index],
                 ))
             }
@@ -563,10 +518,10 @@ impl Cpu {
             // INC $nn
             0x03 | 0x13 | 0x23 | 0x33 => {
                 let register_order: [Destination; 4] = [
-                    Destination::Direct(Target::Register(Register::BC)),
-                    Destination::Direct(Target::Register(Register::DE)),
-                    Destination::Direct(Target::Register(Register::HL)),
-                    Destination::Direct(Target::Register(Register::SP)),
+                    Destination::Direct(Target::Register(RegisterType::BC)),
+                    Destination::Direct(Target::Register(RegisterType::DE)),
+                    Destination::Direct(Target::Register(RegisterType::HL)),
+                    Destination::Direct(Target::Register(RegisterType::SP)),
                 ];
 
                 let index = ((op & 0xF0) >> 4) as usize; // High nibble as index
@@ -576,10 +531,10 @@ impl Cpu {
             // INC $n
             0x04 | 0x14 | 0x24 | 0x34 => {
                 let register_order: [Destination; 4] = [
-                    Destination::Direct(Target::Register(Register::B)),
-                    Destination::Direct(Target::Register(Register::D)),
-                    Destination::Direct(Target::Register(Register::H)),
-                    Destination::Indirect(Target::Register(Register::HL)),
+                    Destination::Direct(Target::Register(RegisterType::B)),
+                    Destination::Direct(Target::Register(RegisterType::D)),
+                    Destination::Direct(Target::Register(RegisterType::H)),
+                    Destination::Indirect(Target::Register(RegisterType::HL)),
                 ];
 
                 let index = ((op & 0xF0) >> 4) as usize; // High nibble as index
@@ -589,10 +544,10 @@ impl Cpu {
             // INC $n
             0x0C | 0x1C | 0x2C | 0x3C => {
                 let register_order: [Destination; 4] = [
-                    Destination::Direct(Target::Register(Register::C)),
-                    Destination::Direct(Target::Register(Register::E)),
-                    Destination::Direct(Target::Register(Register::L)),
-                    Destination::Direct(Target::Register(Register::A)),
+                    Destination::Direct(Target::Register(RegisterType::C)),
+                    Destination::Direct(Target::Register(RegisterType::E)),
+                    Destination::Direct(Target::Register(RegisterType::L)),
+                    Destination::Direct(Target::Register(RegisterType::A)),
                 ];
 
                 let index = ((op & 0xF0) >> 4) as usize; // High nibble as index
@@ -602,10 +557,10 @@ impl Cpu {
             // DEC $n
             0x0D | 0x1D | 0x2D | 0x3D => {
                 let register_order: [Destination; 4] = [
-                    Destination::Direct(Target::Register(Register::C)),
-                    Destination::Direct(Target::Register(Register::E)),
-                    Destination::Direct(Target::Register(Register::L)),
-                    Destination::Direct(Target::Register(Register::A)),
+                    Destination::Direct(Target::Register(RegisterType::C)),
+                    Destination::Direct(Target::Register(RegisterType::E)),
+                    Destination::Direct(Target::Register(RegisterType::L)),
+                    Destination::Direct(Target::Register(RegisterType::A)),
                 ];
 
                 let index = ((op & 0xF0) >> 4) as usize; // High nibble as index
@@ -615,10 +570,10 @@ impl Cpu {
             // DEC $nn
             0x0b | 0x1b | 0x2b | 0x3b => {
                 let register_order: [Destination; 4] = [
-                    Destination::Direct(Target::Register(Register::BC)),
-                    Destination::Direct(Target::Register(Register::DE)),
-                    Destination::Direct(Target::Register(Register::HL)),
-                    Destination::Direct(Target::Register(Register::SP)),
+                    Destination::Direct(Target::Register(RegisterType::BC)),
+                    Destination::Direct(Target::Register(RegisterType::DE)),
+                    Destination::Direct(Target::Register(RegisterType::HL)),
+                    Destination::Direct(Target::Register(RegisterType::SP)),
                 ];
 
                 let index = ((op & 0xF0) >> 4) as usize; // High nibble as index
@@ -628,10 +583,10 @@ impl Cpu {
             // DEC $n
             0x05 | 0x15 | 0x25 | 0x35 => {
                 let register_order: [Destination; 4] = [
-                    Destination::Direct(Target::Register(Register::B)),
-                    Destination::Direct(Target::Register(Register::D)),
-                    Destination::Direct(Target::Register(Register::H)),
-                    Destination::Indirect(Target::Register(Register::HL)),
+                    Destination::Direct(Target::Register(RegisterType::B)),
+                    Destination::Direct(Target::Register(RegisterType::D)),
+                    Destination::Direct(Target::Register(RegisterType::H)),
+                    Destination::Indirect(Target::Register(RegisterType::HL)),
                 ];
 
                 let index = ((op & 0xF0) >> 4) as usize; // High nibble as index
@@ -698,7 +653,7 @@ impl Cpu {
             0xce => {
                 let value = self.byte()?;
                 Ok(Op::ADC(
-                    Destination::Direct(Target::Register(Register::A)),
+                    Destination::Direct(Target::Register(RegisterType::A)),
                     Source::Immediate8(value),
                 ))
             }
@@ -707,7 +662,7 @@ impl Cpu {
             0xde => {
                 let value = self.byte()?;
                 Ok(Op::SBC(
-                    Destination::Direct(Target::Register(Register::A)),
+                    Destination::Direct(Target::Register(RegisterType::A)),
                     Source::Immediate8(value),
                 ))
             }
@@ -716,7 +671,7 @@ impl Cpu {
             0xee => {
                 let value = self.byte()?;
                 Ok(Op::XOR(
-                    Destination::Direct(Target::Register(Register::A)),
+                    Destination::Direct(Target::Register(RegisterType::A)),
                     Source::Immediate8(value),
                 ))
             }
@@ -725,7 +680,7 @@ impl Cpu {
             0xfe => {
                 let value = self.byte()?;
                 Ok(Op::CP(
-                    Destination::Direct(Target::Register(Register::A)),
+                    Destination::Direct(Target::Register(RegisterType::A)),
                     Source::Immediate8(value),
                 ))
             }
@@ -734,7 +689,7 @@ impl Cpu {
             0xc6 => {
                 let value = self.byte()?;
                 Ok(Op::ADD(
-                    Destination::Direct(Target::Register(Register::A)),
+                    Destination::Direct(Target::Register(RegisterType::A)),
                     Source::Immediate8(value),
                 ))
             }
@@ -743,7 +698,7 @@ impl Cpu {
             0xd6 => {
                 let value = self.byte()?;
                 Ok(Op::SUB(
-                    Destination::Direct(Target::Register(Register::A)),
+                    Destination::Direct(Target::Register(RegisterType::A)),
                     Source::Immediate8(value),
                 ))
             }
@@ -752,7 +707,7 @@ impl Cpu {
             0xe6 => {
                 let value = self.byte()?;
                 Ok(Op::AND(
-                    Destination::Direct(Target::Register(Register::A)),
+                    Destination::Direct(Target::Register(RegisterType::A)),
                     Source::Immediate8(value),
                 ))
             }
@@ -761,7 +716,7 @@ impl Cpu {
             0xf6 => {
                 let value = self.byte()?;
                 Ok(Op::OR(
-                    Destination::Direct(Target::Register(Register::A)),
+                    Destination::Direct(Target::Register(RegisterType::A)),
                     Source::Immediate8(value),
                 ))
             }
@@ -769,15 +724,15 @@ impl Cpu {
             // ADD SP, i8
             0xe8 => {
                 let value = self.byte()? as i8;
-                Ok(Op::ADDi8(Register::SP, value))
+                Ok(Op::ADDi8(RegisterType::SP, value))
             }
 
             // LD HL, SP+i8
             0xfa => {
-                let value = self.byte()? as u16;
+                let value = self.byte()? as usize;
                 Ok(Op::LDi8(
-                    Destination::Direct(Target::Register(Register::HL)),
-                    Source::Indexed(Target::Register(Register::SP), value),
+                    Destination::Direct(Target::Register(RegisterType::HL)),
+                    Source::Indexed(Target::Register(RegisterType::SP), value),
                 ))
             }
 
@@ -883,7 +838,119 @@ impl Cpu {
         }
     }
 
-    pub fn execute_instruction(&mut self, instruction: Op) {}
+    pub fn execute_instruction(&mut self, instruction: Op) {
+        match instruction {
+            Op::JR(flag, offset) => self.jr(flag, offset),
+            Op::BIT(n, src) => self.bit(n, src),
+            // Op::LD(dst, src) => self.ld(dst, src),
+            _ => { 0 }
+        };
+    }
+
+    fn jr(&mut self, flag: Option<Flag>, offset: i8) -> u8 {
+        let op_pc = self.reg.pc - 1;
+        let addr = op_pc.wrapping_add(offset as usize);
+        if let Some(flag) = flag {
+            match flag {
+                Flag::NZ => { if !self.reg.f.z { self.reg.pc = addr; } }
+                Flag::Z => { if self.reg.f.z { self.reg.pc = addr; } }
+                Flag::NC => { if !self.reg.f.c { self.reg.pc = addr; } }
+                Flag::C => { if self.reg.f.c { self.reg.pc = addr; } }
+            };
+            12
+        } else {
+            self.reg.pc = addr;
+            8
+        }
+    }
+
+    fn bit(&mut self, n: u8, source: Source) -> u8 {
+        match source {
+            Source::Direct(Target::Register(reg)) => {
+                let reg = self.value_from_reg(reg);
+                if reg >> n & 0b1 == 0 {
+                    self.reg.f.z = false;
+                }
+                self.reg.f.n = false;
+                self.reg.f.h = true;
+                8
+            }
+            _ => panic!("invalid BIT target"),
+        }
+    }
+
+    // fn ld(&mut self, dst: Destination, src: Source) -> u8 {
+    //     let src_value = self.value_from_source(src);
+    //     match dst {
+    //         Destination::Direct(target) => {
+    //             match target {
+    //                 Target::Register(reg) => self.set_reg(reg, src_value),
+    //                 Target::Address(addr) => match src_value {
+    //                     ByteOrWord::Byte(b) => self.mmu.write_byte(addr, b),
+    //                     ByteOrWord::Word(w) => self.mmu.write_word(addr, w),
+    //                 }
+    //             }
+    //         }
+    //         Destination::Indirect(target) => {
+    //             match target {
+    //                 Target::Register(reg) => {
+    //                     self.set_reg(reg, src_value)
+    //                 }
+    //                 Target::Address(addr) => match src_value {
+    //                     ByteOrWord::Byte(b) => self.mmu.write_byte(addr, b),
+    //                     ByteOrWord::Word(w) => self.mmu.write_word(addr, w),
+    //                 }
+    //             }
+    //         }
+    //         Destination::Indexed(target, offset) => {}
+    //     }
+    //     8
+    // }
+
+    fn value_from_source(&self, src: Source) -> ByteOrWord {
+        match src {
+            Source::Immediate8(n) => ByteOrWord::Byte(n),
+            Source::Immediate16(nn) => ByteOrWord::Word(nn),
+            Source::Direct(target) => match target {
+                // TODO: Make value_from_reg handle u16 too
+                Target::Register(reg) => ByteOrWord::Byte(self.value_from_reg(reg)),
+                _ => panic!("bad direct target")
+            }
+            Source::Indirect(target) => match target {
+                Target::Register(reg) => ByteOrWord::Byte(self.value_from_reg(reg)),
+                // TODO: Refactor byte/word to always return, not Result
+                Target::Address(addr) => ByteOrWord::Byte(self.mmu.byte(addr).unwrap()),
+            }
+            Source::Indexed(target, offset) => match target {
+                Target::Register(reg) => ByteOrWord::Byte(self.value_from_reg(reg)),
+                // TODO: Refactor byte/word to always return, not Result
+                Target::Address(addr) => ByteOrWord::Byte(self.mmu.byte(addr + offset).unwrap()),
+            }
+        }
+    }
+
+    fn value_from_reg(&self, reg: RegisterType) -> u8 {
+        match reg {
+            RegisterType::A => self.reg.a,
+            RegisterType::B => self.reg.b,
+            RegisterType::C => self.reg.c,
+            RegisterType::D => self.reg.d,
+            RegisterType::E => self.reg.e,
+            RegisterType::F => Into::<u8>::into(&self.reg.f),
+            RegisterType::H => self.reg.h,
+            RegisterType::L => self.reg.l,
+            // TODO: Reimplement
+            // Register::AF => self.af(),
+            // Register::BC => self.bc(),
+            // Register::DE => self.de(),
+            // Register::HL => self.hl(),
+            // Register::SP => self.sp,
+            // TODO: Should we implement these?
+            // Register::HLD => self.h,
+            // Register::HLI => self.h,
+            _ => panic!("cannot get value from HLD or HLI"),
+        }
+    }
 
     pub fn clear_vram(&mut self) -> ProgramCounter {
         self.mmu.clear_vram();

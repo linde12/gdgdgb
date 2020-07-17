@@ -2,9 +2,11 @@ use std::env;
 use std::fs::File;
 use std::io::prelude::*;
 use anyhow::{self, Context};
+use std::io::stdin;
 
 mod mmu;
 mod cpu;
+mod register;
 mod error;
 
 use crate::mmu::Mmu;
@@ -25,11 +27,14 @@ fn main() -> anyhow::Result<()> {
     match cmd.as_str() {
         "d" | "disassemble" | "disasm" => loop {
             let op = cpu.read_instruction()?;
-            println!("{:#06x}\t{:02x?}", cpu.pc, op);
+            println!("{:#06x}\t{:02x?}", cpu.pc(), op);
         },
         "r" | "run" => loop {
             let op = cpu.read_instruction()?;
+            println!("{:#06x}\t{:02x?}", cpu.pc(), op);
             cpu.execute_instruction(op);
+            let mut buf = String::new();
+            stdin().read_line(&mut buf)?;
         }
         _ => Err(GBError::BadCommand.into()),
     }
