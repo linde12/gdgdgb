@@ -881,12 +881,13 @@ impl Cpu {
     }
 
     fn bit(&mut self, n: u8, source: Source) -> u8 {
+        println!("source is {:?}", source);
         match source {
             Source::Direct(Target::Register8(reg)) => {
                 let reg = self.reg.reg8(reg);
                 let cpu_flags: FlagsRegister = self.reg.f.into();
-                if reg >> n & 0b1 == 0 {
-                    self.reg.set_flag(Flag::Zero, false);
+                if reg & (1 << n) == 0 {
+                    self.reg.set_flag(Flag::Zero, true);
                 }
                 self.reg.set_flag(Flag::Negative, false);
                 self.reg.set_flag(Flag::HalfCarry, true);
@@ -922,10 +923,10 @@ impl Cpu {
                         self.mmu.write_word(addr, src_value);
                         match reg {
                             RegisterType16::HLD => {
-                                self.reg.dec_hl()
+                                self.reg.dec_hl();
                             }
                             RegisterType16::HLI => {
-                                self.reg.inc_hl()
+                                self.reg.inc_hl();
                             }
                             _ => {}
                         }

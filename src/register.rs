@@ -58,9 +58,11 @@ pub struct FlagsRegister {
 
 impl From<u8> for FlagsRegister {
     fn from(flags: u8) -> Self {
-        let z = flags & 0b1000 == 1;
-        let n = flags & 0b0100 == 1;
-        let h = flags & 0b0010 == 1;
+        let flags = flags >> 4;
+
+        let z = flags >> 3 == 1;
+        let n = flags & 0b0100 >> 2 == 1;
+        let h = flags & 0b0010 >> 1 == 1;
         let c = flags & 0b0001 == 1;
 
         FlagsRegister { z, n, h, c }
