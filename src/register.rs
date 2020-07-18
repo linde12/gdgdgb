@@ -1,4 +1,4 @@
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum RegisterType8 {
     A,
     B,
@@ -10,7 +10,7 @@ pub enum RegisterType8 {
     L,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum RegisterType16 {
     AF,
     BC,
@@ -28,7 +28,6 @@ pub enum Flag {
     HalfCarry,
     Carry,
 }
-
 
 #[derive(Debug)]
 pub enum ByteOrWord {
@@ -101,12 +100,30 @@ impl Register {
     pub fn set_reg16(&mut self, reg: RegisterType16, value: usize) {
         match reg {
             // TODO: Store F register as bits instead of a struct
-            RegisterType16::AF => { self.a = (value & 0x00FF) as u8; self.f = (value & 0xFF00 >> 8) as u8; }
-            RegisterType16::BC => { self.b = (value & 0x00FF) as u8; self.c = (value & 0xFF00 >> 8) as u8; }
-            RegisterType16::DE => { self.d = (value & 0x00FF) as u8; self.e = (value & 0xFF00 >> 8) as u8; }
-            RegisterType16::HL => { self.h = (value & 0x00FF) as u8; self.l = (value & 0xFF00 >> 8) as u8; }
-            RegisterType16::HLD => { self.h = (value & 0x00FF) as u8; self.l = (value & 0xFF00 >> 8) as u8; }
-            RegisterType16::HLI => { self.h = (value & 0x00FF) as u8; self.l = (value & 0xFF00 >> 8) as u8; }
+            RegisterType16::AF => {
+                self.a = (value & 0x00FF) as u8;
+                self.f = (value & 0xFF00 >> 8) as u8;
+            }
+            RegisterType16::BC => {
+                self.b = (value & 0x00FF) as u8;
+                self.c = (value & 0xFF00 >> 8) as u8;
+            }
+            RegisterType16::DE => {
+                self.d = (value & 0x00FF) as u8;
+                self.e = (value & 0xFF00 >> 8) as u8;
+            }
+            RegisterType16::HL => {
+                self.h = (value & 0x00FF) as u8;
+                self.l = (value & 0xFF00 >> 8) as u8;
+            }
+            RegisterType16::HLD => {
+                self.h = (value & 0x00FF) as u8;
+                self.l = (value & 0xFF00 >> 8) as u8;
+            }
+            RegisterType16::HLI => {
+                self.h = (value & 0x00FF) as u8;
+                self.l = (value & 0xFF00 >> 8) as u8;
+            }
             RegisterType16::SP => self.sp = value,
             // TODO: Refactor HLD/HLI to not be a RegisterType?
             _ => panic!("cannot set 8 bit regs or HLD, HLI with set_reg16"),
