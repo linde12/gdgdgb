@@ -327,7 +327,7 @@ impl Cpu {
                 ))
             }
 
-            // LD A (nn)
+            // LD A (BC/DE/HL+/HL-)
             0x0a | 0x1a | 0x2a | 0x3a => {
                 let register_order: [Source; 4] = [
                     Source::Indirect(IndirectTarget::Register16(RegisterType16::BC)),
@@ -352,15 +352,13 @@ impl Cpu {
                 ))
             }
 
-            // LD A, (C)
-            // Same as LD A, (0xff00 + C)
+            // LD A, (0xff00 + C)
             0xF2 => Ok(Op::LD(
                 Destination::Direct(Target::Register8(RegisterType8::A)),
                 Source::Indexed(IndexedTarget::Register8(RegisterType8::C), IO_REGISTER_OFFSET),
             )),
 
-            // LD (C), A
-            // Same as LD (0xff00 + C), A
+            // LD (0xff00 + C), A
             0xE2 => Ok(Op::LD(
                 Destination::Indexed(IndexedTarget::Register8(RegisterType8::C), IO_REGISTER_OFFSET),
                 Source::Direct(Target::Register8(RegisterType8::A)),
@@ -371,7 +369,7 @@ impl Cpu {
                 Source::Direct(Target::Register8(RegisterType8::A)),
             )),
 
-            // LD (HLI), A
+            // LD (HL+), A
             0x22 => Ok(Op::LD(
                 Destination::Indirect(IndirectTarget::Register16(RegisterType16::HLI)),
                 Source::Direct(Target::Register8(RegisterType8::A)),
