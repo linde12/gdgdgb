@@ -22,12 +22,6 @@ pub enum RegisterType16 {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub enum RegisterType {
-    Register8(RegisterType8),
-    Register16(RegisterType16),
-}
-
-#[derive(Debug, Copy, Clone)]
 pub enum Flag {
     Zero,
     Negative,
@@ -109,6 +103,8 @@ impl Register {
             RegisterType16::BC => { self.b = (value & 0x00FF) as u8; self.c = (value & 0xFF00 >> 8) as u8; }
             RegisterType16::DE => { self.d = (value & 0x00FF) as u8; self.e = (value & 0xFF00 >> 8) as u8; }
             RegisterType16::HL => { self.h = (value & 0x00FF) as u8; self.l = (value & 0xFF00 >> 8) as u8; }
+            RegisterType16::HLD => { self.h = (value & 0x00FF) as u8; self.l = (value & 0xFF00 >> 8) as u8; }
+            RegisterType16::HLI => { self.h = (value & 0x00FF) as u8; self.l = (value & 0xFF00 >> 8) as u8; }
             RegisterType16::SP => self.sp = value,
             // TODO: Refactor HLD/HLI to not be a RegisterType?
             _ => panic!("cannot set 8 bit regs or HLD, HLI with set_reg16"),
@@ -121,10 +117,26 @@ impl Register {
             RegisterType16::AF => (((self.a as u16) << 8) | self.f as u16) as usize,
             RegisterType16::BC => (((self.b as u16) << 8) | self.c as u16) as usize,
             RegisterType16::DE => (((self.d as u16) << 8) | self.e as u16) as usize,
-            RegisterType16::HL => (((self.h as u16) << 8) | self.l as u16) as usize,
+            RegisterType16::HL => self.hl(),
             RegisterType16::SP => self.sp,
+            // RegisterType16::HLD => {let v = self.hl(); self.dec_hl(); v }
+            // RegisterType16::HLI => {let v = self.hl(); self.inc_hl(); v }
             _ => panic!("cannot get 8 bit regs or HLD, HLI with reg16"),
         }
+    }
+
+    // fn dec_hl(&mut self) {
+    //     let new_hl = self.hl() - 1;
+    //     self.set_reg16(RegisterType16::HL, new_hl);
+    // }
+
+    // fn inc_hl(&mut self) {
+    //     let new_hl = self.hl() + 1;
+    //     self.set_reg16(RegisterType16::HL, new_hl);
+    // }
+
+    fn hl(&self) -> usize {
+        (((self.h as u16) << 8) | self.l as u16) as usize
     }
 
     pub fn set_reg8(&mut self, reg: RegisterType8, value: u8) {

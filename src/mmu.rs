@@ -48,24 +48,23 @@ impl Mmu {
         (first as usize) | ((second as usize) << 8)
     }
 
-    pub fn write_byte(&mut self, index: usize, b: u8) -> Result<(), GBError> {
+    pub fn write_byte(&mut self, index: usize, b: u8) {
         match index {
-            0x0000 ..= 0x7FFF => {self.rom[index] = b; Ok(())},
-            0x8000 ..= 0x9FFF => {self.vram[index - 0x8000] = b; Ok(())},
-            0xA000 ..= 0xBFFF => {self.ext_ram[index - 0xA000] = b; Ok(())},
-            0xC000 ..= 0xDFFF => {self.ram[index - 0xC000] = b; Ok(())},
-            0xFE00 ..= 0xFE9F => {self.oam[index - 0xFE00] = b; Ok(())},
-            0xFF00 ..= 0xFF7F => {self.io[index - 0xFF00] = b; Ok(())},
-            0xFF80 ..= 0xFFFE => {self.hram[index - 0xFF80] = b; Ok(())},
-            0xFFFF => {self.ie = b; Ok(())},
-            _ => Err(GBError::WriteByte),
+            0x0000 ..= 0x7FFF => self.rom[index] = b,
+            0x8000 ..= 0x9FFF => self.vram[index - 0x8000] = b,
+            0xA000 ..= 0xBFFF => self.ext_ram[index - 0xA000] = b,
+            0xC000 ..= 0xDFFF => self.ram[index - 0xC000] = b,
+            0xFE00 ..= 0xFE9F => self.oam[index - 0xFE00] = b,
+            0xFF00 ..= 0xFF7F => self.io[index - 0xFF00] = b,
+            0xFF80 ..= 0xFFFE => self.hram[index - 0xFF80] = b,
+            0xFFFF => self.ie = b,
+            _ => {} // NOP
         }
     }
 
-    pub fn write_word(&mut self, index: usize, w: usize) -> Result<(), GBError> {
-        self.write_byte(index, (w & 0xFF) as u8)?;
-        self.write_byte(index, (w >> 8) as u8)?;
-        Ok(())
+    pub fn write_word(&mut self, index: usize, w: usize) {
+        self.write_byte(index, (w & 0xFF) as u8);
+        self.write_byte(index, (w >> 8) as u8);
     }
 
     pub fn load_rom(&mut self, rom: Vec<u8>) -> Result<(), GBError> {
