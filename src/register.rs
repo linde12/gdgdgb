@@ -125,15 +125,15 @@ impl Register {
         }
     }
 
-    // fn dec_hl(&mut self) {
-    //     let new_hl = self.hl() - 1;
-    //     self.set_reg16(RegisterType16::HL, new_hl);
-    // }
+    pub fn dec_hl(&mut self) {
+        let new_hl = self.hl() - 1;
+        self.set_reg16(RegisterType16::HL, new_hl);
+    }
 
-    // fn inc_hl(&mut self) {
-    //     let new_hl = self.hl() + 1;
-    //     self.set_reg16(RegisterType16::HL, new_hl);
-    // }
+    pub fn inc_hl(&mut self) {
+        let new_hl = self.hl() + 1;
+        self.set_reg16(RegisterType16::HL, new_hl);
+    }
 
     fn hl(&self) -> usize {
         (((self.h as u16) << 8) | self.l as u16) as usize

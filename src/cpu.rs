@@ -911,11 +911,26 @@ impl Cpu {
                 }
             }
             Destination::Indirect(target) => {
-                // TODO: HLD, HLI
                 match target {
                     IndirectTarget::Register16(reg) => {
-                        let addr = self.reg.reg16(reg);
+                        // terrible hack.
+                        // TODO Make LD (HL-) and LD (HL+) separate operations (not Op::LD)
+                        let actual_reg = match reg {
+                            RegisterType16::HLI => RegisterType16::HL,
+                            RegisterType16::HLD => RegisterType16::HL,
+                            reg => reg,
+                        };
+                        let addr = self.reg.reg16(actual_reg);
                         self.mmu.write_word(addr, src_value);
+                        match reg {
+                            RegisterType16::HLD => {
+                                self.reg.dec_hl()
+                            }
+                            RegisterType16::HLI => {
+                                self.reg.inc_hl()
+                            }
+                            _ => {}
+                        }
                     }
                     IndirectTarget::Address(addr) => {
                         self.mmu.write_word(addr, src_value);
