@@ -74,7 +74,7 @@ pub enum IndexedTarget {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub enum Conditional {
+pub enum Condition {
     NZ, // Not Zero
     NC, // No Carry
     Z,  // Zero
@@ -100,9 +100,9 @@ pub enum Op {
     PREFIX, // 0xCB
     PUSH(RegisterType16),
     POP(RegisterType16),
-    CALL(Option<Conditional>, usize),
-    RET(Option<Conditional>),
-    JR(Option<Conditional>, i8),
+    CALL(Option<Condition>, usize),
+    RET(Option<Condition>),
+    JR(Option<Condition>, i8),
     INC(Destination),
     DEC(Destination),
     LD(Destination, Source), // Load Operand 2 into Operand 1
@@ -212,10 +212,10 @@ impl Cpu {
             0xf5 => Ok(Op::PUSH(RegisterType16::AF)),
 
             // RET
-            0xc0 => Ok(Op::RET(Some(Conditional::NZ))),
-            0xd0 => Ok(Op::RET(Some(Conditional::NC))),
-            0xc8 => Ok(Op::RET(Some(Conditional::Z))),
-            0xd8 => Ok(Op::RET(Some(Conditional::C))),
+            0xc0 => Ok(Op::RET(Some(Condition::NZ))),
+            0xd0 => Ok(Op::RET(Some(Condition::NC))),
+            0xc8 => Ok(Op::RET(Some(Condition::Z))),
+            0xd8 => Ok(Op::RET(Some(Condition::C))),
             0xc9 => Ok(Op::RET(None)),
             0xd9 => Ok(Op::RETI),
 
@@ -636,46 +636,46 @@ impl Cpu {
             // JR NZ, i8
             0x20 => {
                 let value = self.byte() as i8;
-                Ok(Op::JR(Some(Conditional::NZ), value))
+                Ok(Op::JR(Some(Condition::NZ), value))
             }
 
             // JR NC, i8
             0x30 => {
                 let value = self.byte() as i8;
-                Ok(Op::JR(Some(Conditional::NC), value))
+                Ok(Op::JR(Some(Condition::NC), value))
             }
 
             // JR Z, i8
             0x28 => {
                 let value = self.byte() as i8;
-                Ok(Op::JR(Some(Conditional::Z), value))
+                Ok(Op::JR(Some(Condition::Z), value))
             }
 
             // JR C, i8
             0x38 => {
                 let value = self.byte() as i8;
-                Ok(Op::JR(Some(Conditional::C), value))
+                Ok(Op::JR(Some(Condition::C), value))
             }
 
             // CALL $cond, u16
             0xc4 => {
                 let value = self.word();
-                Ok(Op::CALL(Some(Conditional::NZ), value))
+                Ok(Op::CALL(Some(Condition::NZ), value))
             }
 
             0xd4 => {
                 let value = self.word();
-                Ok(Op::CALL(Some(Conditional::NC), value))
+                Ok(Op::CALL(Some(Condition::NC), value))
             }
 
             0xcc => {
                 let value = self.word();
-                Ok(Op::CALL(Some(Conditional::Z), value))
+                Ok(Op::CALL(Some(Condition::Z), value))
             }
 
             0xdc => {
                 let value = self.word();
-                Ok(Op::CALL(Some(Conditional::C), value))
+                Ok(Op::CALL(Some(Condition::C), value))
             }
 
             0xcd => {
@@ -883,28 +883,28 @@ impl Cpu {
         };
     }
 
-    fn jr(&mut self, flag: Option<Conditional>, offset: i8) -> u8 {
+    fn jr(&mut self, flag: Option<Condition>, offset: i8) -> u8 {
         let op_pc = self.reg.pc - 1;
         let addr = op_pc.wrapping_add(offset as usize);
         if let Some(flag) = flag {
             let cpu_flags: FlagsRegister = self.reg.f.into();
             match flag {
-                Conditional::NZ => {
+                Condition::NZ => {
                     if !cpu_flags.z {
                         self.reg.pc = addr;
                     }
                 }
-                Conditional::Z => {
+                Condition::Z => {
                     if cpu_flags.z {
                         self.reg.pc = addr;
                     }
                 }
-                Conditional::NC => {
+                Condition::NC => {
                     if !cpu_flags.c {
                         self.reg.pc = addr;
                     }
                 }
-                Conditional::C => {
+                Condition::C => {
                     if cpu_flags.c {
                         self.reg.pc = addr;
                     }
