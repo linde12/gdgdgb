@@ -12,7 +12,7 @@ static DEFAULT_DST_REGISTER_ORDER: [Destination; 8] = [
     Destination::Direct(Target::Register8(RegisterType8::E)),
     Destination::Direct(Target::Register8(RegisterType8::H)),
     Destination::Direct(Target::Register8(RegisterType8::L)),
-    Destination::Indirect(IndirectTarget::Register16(RegisterType16::HL)), // (HL)
+    Destination::Indirect(RegisterType16::HL), // (HL)
     Destination::Direct(Target::Register8(RegisterType8::A)),
 ];
 
@@ -23,21 +23,15 @@ static DEFAULT_SRC_REGISTER_ORDER: [Source; 8] = [
     Source::Direct(Target::Register8(RegisterType8::E)),
     Source::Direct(Target::Register8(RegisterType8::H)),
     Source::Direct(Target::Register8(RegisterType8::L)),
-    Source::Indirect(IndirectTarget::Register16(RegisterType16::HL)), // (HL)
+    Source::Indirect(RegisterType16::HL), // (HL)
     Source::Direct(Target::Register8(RegisterType8::A)),
 ];
-
-#[derive(Debug)]
-pub enum ProgramCounter {
-    Next,
-    Jump(usize),
-}
 
 // See https://www.cs.helsinki.fi/u/kerola/tito/koksi_doc/memaddr.html
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Destination {
     Direct(Target),                // Direct value, either a register or u16 address
-    Indirect(IndirectTarget), // A pointer to an address, either from register or an address location
+    Indirect(RegisterType16), // A pointer to an address, either from register or an address location
     Indexed(IndexedTarget, u16), // Value of target+offset, where target can be a value in a register or a u16 and offset is a u16
 }
 
@@ -47,7 +41,7 @@ pub enum Source {
     Immediate8(u8),
     Immediate16(u16),
     Direct(Target),                // Direct value, either a register or u16 address
-    Indirect(IndirectTarget), // A pointer to an address, either from register or an address location
+    Indirect(RegisterType16), // A pointer to an address, either from register or an address location
     Indexed(IndexedTarget, u16), // Value of target+offset, where target can be a value in a register or a u16 and offset is a u16
     Offset(RegisterType16, i8),    // E.g. 0xF8 => LD HL, SP+i8
 }
@@ -56,13 +50,6 @@ pub enum Source {
 pub enum Target {
     Register16(RegisterType16),
     Register8(RegisterType8),
-    Address(usize),
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum IndirectTarget {
-    // e.g. (HL) or ($ff00)
-    Register16(RegisterType16),
     Address(usize),
 }
 
@@ -274,7 +261,7 @@ impl Cpu {
             0x36 => {
                 let value = self.byte();
                 Ok(Op::LD(
-                    Destination::Indirect(IndirectTarget::Register16(RegisterType16::HL)),
+                    Destination::Indirect(RegisterType16::HL),
                     Source::Immediate8(value),
                 ))
             }
@@ -306,12 +293,12 @@ impl Cpu {
             }
 
             0x02 => Ok(Op::LD(
-                Destination::Indirect(IndirectTarget::Register16(RegisterType16::BC)),
+                Destination::Indirect(RegisterType16::BC),
                 Source::Direct(Target::Register8(RegisterType8::A)),
             )),
 
             0x12 => Ok(Op::LD(
-                Destination::Indirect(IndirectTarget::Register16(RegisterType16::DE)),
+                Destination::Indirect(RegisterType16::DE),
                 Source::Direct(Target::Register8(RegisterType8::A)),
             )),
 
@@ -326,25 +313,25 @@ impl Cpu {
             // LD A, (BC)
             0x0a => Ok(Op::LD(
                 Destination::Direct(Target::Register8(RegisterType8::A)),
-                Source::Indirect(IndirectTarget::Register16(RegisterType16::BC)),
+                Source::Indirect(RegisterType16::BC),
             )),
 
             // LD A, (DE)
             0x1a => Ok(Op::LD(
                 Destination::Direct(Target::Register8(RegisterType8::A)),
-                Source::Indirect(IndirectTarget::Register16(RegisterType16::DE)),
+                Source::Indirect(RegisterType16::DE),
             )),
 
             // LD A, (HL+) i.e LDI A, (HL)
             0x2a => Ok(Op::LDI(
                 Destination::Direct(Target::Register8(RegisterType8::A)),
-                Source::Indirect(IndirectTarget::Register16(RegisterType16::HL)),
+                Source::Indirect(RegisterType16::HL),
             )),
 
             // LD A, (HL-) i.e LDD A, (HL)
             0x3a => Ok(Op::LDD(
                 Destination::Direct(Target::Register8(RegisterType8::A)),
-                Source::Indirect(IndirectTarget::Register16(RegisterType16::HL)),
+                Source::Indirect(RegisterType16::HL),
             )),
 
             // LD A, u8
@@ -376,13 +363,13 @@ impl Cpu {
 
             // LD (HL-), A
             0x32 => Ok(Op::LDD(
-                Destination::Indirect(IndirectTarget::Register16(RegisterType16::HL)),
+                Destination::Indirect(RegisterType16::HL),
                 Source::Direct(Target::Register8(RegisterType8::A)),
             )),
 
             // LD (HL+), A
             0x22 => Ok(Op::LDI(
-                Destination::Indirect(IndirectTarget::Register16(RegisterType16::HL)),
+                Destination::Indirect(RegisterType16::HL),
                 Source::Direct(Target::Register8(RegisterType8::A)),
             )),
 
@@ -560,7 +547,7 @@ impl Cpu {
                     Destination::Direct(Target::Register8(RegisterType8::B)),
                     Destination::Direct(Target::Register8(RegisterType8::D)),
                     Destination::Direct(Target::Register8(RegisterType8::H)),
-                    Destination::Indirect(IndirectTarget::Register16(RegisterType16::HL)),
+                    Destination::Indirect(RegisterType16::HL),
                 ];
 
                 let index = ((op & 0xF0) >> 4) as usize; // High nibble as index
@@ -612,7 +599,7 @@ impl Cpu {
                     Destination::Direct(Target::Register8(RegisterType8::B)),
                     Destination::Direct(Target::Register8(RegisterType8::D)),
                     Destination::Direct(Target::Register8(RegisterType8::H)),
-                    Destination::Indirect(IndirectTarget::Register16(RegisterType16::HL)),
+                    Destination::Indirect(RegisterType16::HL),
                 ];
 
                 let index = ((op & 0xF0) >> 4) as usize; // High nibble as index
@@ -952,14 +939,9 @@ impl Cpu {
                 Target::Register16(reg) => self.reg.set_reg16(reg, src_value),
                 Target::Address(addr) => self.mmu.write_byte(addr, src_value as u8),
             },
-            Destination::Indirect(target) => match target {
-                IndirectTarget::Register16(reg) => {
-                    let addr = self.reg.reg16(reg);
-                    self.mmu.write_word(addr as usize, src_value);
-                }
-                IndirectTarget::Address(addr) => {
-                    self.mmu.write_word(addr, src_value);
-                }
+            Destination::Indirect(reg) => {
+                let addr = self.reg.reg16(reg);
+                self.mmu.write_word(addr as usize, src_value);
             },
             Destination::Indexed(target, addr) => match target {
                 IndexedTarget::Register8(reg) => {
@@ -997,14 +979,9 @@ impl Cpu {
         }
     }
 
-    fn indirect_from_target(&self, target: IndirectTarget) -> u8 {
-        match target {
-            IndirectTarget::Register16(reg) => {
-                let addr = self.reg.reg16(reg);
-                self.mmu.byte(addr as usize)
-            }
-            IndirectTarget::Address(addr) => self.mmu.byte(addr),
-        }
+    fn indirect_from_target(&self, reg: RegisterType16) -> u8 {
+        let addr = self.reg.reg16(reg);
+        self.mmu.byte(addr as usize)
     }
 
     fn indexed_from_target(&self, target: IndexedTarget, offset_addr: u16) -> u8 {
@@ -1018,10 +995,5 @@ impl Cpu {
             }
             IndexedTarget::Immediate8(n) => self.mmu.byte(n + offset_addr as usize),
         }
-    }
-
-    pub fn clear_vram(&mut self) -> ProgramCounter {
-        self.mmu.clear_vram();
-        ProgramCounter::Next
     }
 }
