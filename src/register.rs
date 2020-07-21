@@ -16,8 +16,6 @@ pub enum RegisterType16 {
     BC,
     DE,
     HL,
-    HLD, // Not an actual register, HL Decrement (HL-)
-    HLI, // Not an actual register, HL Increment (HL+)
     SP,
 }
 
@@ -27,24 +25,6 @@ pub enum Flag {
     Negative,
     HalfCarry,
     Carry,
-}
-
-#[derive(Debug)]
-pub enum ByteOrWord {
-    Byte(u8),
-    Word(usize),
-}
-
-impl From<u8> for ByteOrWord {
-    fn from(b: u8) -> Self {
-        ByteOrWord::Byte(b)
-    }
-}
-
-impl From<usize> for ByteOrWord {
-    fn from(w: usize) -> Self {
-        ByteOrWord::Word(w)
-    }
 }
 
 #[derive(Debug)]
@@ -68,6 +48,21 @@ impl From<u8> for FlagsRegister {
     }
 }
 
+macro_rules! reg_16 {
+    ($name: ident, $reg1: ident, $reg2: ident) => {
+        pub fn $name(&self) -> usize {
+            ((self.$reg1 as usize) << 8) | (self.$reg2 as usize)
+        }
+    };
+
+    ($name: ident) => {
+        pub fn $name(&self) -> usize {
+            self.$name
+        }
+    };
+}
+
+#[derive(Default, Debug)]
 pub struct Register {
     pub a: u8,
     pub b: u8,
@@ -84,18 +79,14 @@ pub struct Register {
 impl Register {
     pub fn new() -> Self {
         Register {
-            a: 0,
-            b: 0,
-            c: 0,
-            d: 0,
-            e: 0,
-            f: 0,
-            h: 0,
-            l: 0,
-            pc: 0,
-            sp: 0,
+            ..Default::default()
         }
     }
+
+    reg_16!(af, a, f);
+    reg_16!(bc, b, c);
+    reg_16!(de, d, e);
+    reg_16!(hl, h, l);
 
     pub fn set_reg16(&mut self, reg: RegisterType16, value: usize) {
         match reg {
@@ -116,14 +107,6 @@ impl Register {
                 self.h = (value & 0x00FF) as u8;
                 self.l = (value & 0xFF00 >> 8) as u8;
             }
-            RegisterType16::HLD => {
-                self.h = (value & 0x00FF) as u8;
-                self.l = (value & 0xFF00 >> 8) as u8;
-            }
-            RegisterType16::HLI => {
-                self.h = (value & 0x00FF) as u8;
-                self.l = (value & 0xFF00 >> 8) as u8;
-            }
             RegisterType16::SP => self.sp = value,
             // TODO: Refactor HLD/HLI to not be a RegisterType?
             _ => panic!("cannot set 8 bit regs or HLD, HLI with set_reg16"),
@@ -138,24 +121,16 @@ impl Register {
             RegisterType16::DE => (((self.d as u16) << 8) | self.e as u16) as usize,
             RegisterType16::HL => self.hl(),
             RegisterType16::SP => self.sp,
-            // RegisterType16::HLD => {let v = self.hl(); self.dec_hl(); v }
-            // RegisterType16::HLI => {let v = self.hl(); self.inc_hl(); v }
             _ => panic!("cannot get 8 bit regs or HLD, HLI with reg16"),
         }
     }
 
     pub fn dec_hl(&mut self) {
-        let new_hl = self.hl() - 1;
-        self.set_reg16(RegisterType16::HL, new_hl);
+        self.set_reg16(RegisterType16::HL, self.hl().wrapping_sub(1));
     }
 
     pub fn inc_hl(&mut self) {
-        let new_hl = self.hl() + 1;
-        self.set_reg16(RegisterType16::HL, new_hl);
-    }
-
-    fn hl(&self) -> usize {
-        (((self.h as u16) << 8) | self.l as u16) as usize
+        self.set_reg16(RegisterType16::HL, self.hl().wrapping_add(1));
     }
 
     pub fn set_reg8(&mut self, reg: RegisterType8, value: u8) {

@@ -1,6 +1,6 @@
 use crate::error::GBError;
 use crate::mmu::Mmu;
-use crate::register::{ByteOrWord, Flag, FlagsRegister, Register, RegisterType16, RegisterType8};
+use crate::register::{Flag, FlagsRegister, Register, RegisterType16, RegisterType8};
 
 const IO_REGISTER_OFFSET: usize = 0xff00;
 
@@ -877,8 +877,8 @@ impl Cpu {
             Op::JR(flag, offset) => self.jr(flag, offset),
             Op::BIT(n, src) => self.bit(n, src),
             Op::LD(dst, src) => self.ld(dst, src),
-            Op::LDD(dst, src) => self.ld_with_hl_change(dst, src, false),
-            Op::LDI(dst, src) => self.ld_with_hl_change(dst, src, true),
+            Op::LDD(dst, src) => self.ldd(dst, src),
+            Op::LDI(dst, src) => self.ldi(dst, src),
             _ => 0,
         };
     }
@@ -934,51 +934,27 @@ impl Cpu {
         }
     }
 
-    fn ld_with_hl_change(
-        &mut self,
-        dst: Destination,
-        src: Source,
-        increment: bool, /* increment HL if true, decrement if false */
-    ) -> u8 {
-        // TODO Maybe use match...
-        debug_assert!(
-            src == Source::Direct(Target::Register8(RegisterType8::A))
-                || src == Source::Indirect(IndirectTarget::Register16(RegisterType16::HL)),
-            "LDD: Invalid Source"
-        );
+    fn ld(&mut self, dst: Destination, src: Source) -> u8 {
         let src_value = self.value_from_source(src);
-        println!("source value is {:02x}", src_value);
-
-        match dst {
-            // LDD A, (HL)
-            Destination::Direct(Target::Register8(RegisterType8::A)) => {
-                self.reg.set_reg8(RegisterType8::A, src_value as u8); // Set A to value from (HL)
-            }
-
-            // LDD (HL), A
-            Destination::Indirect(IndirectTarget::Register16(RegisterType16::HL)) => {
-                let addr = self.reg.reg16(RegisterType16::HL); // Read value at address set in HL
-                self.mmu.write_word(addr, src_value); // Write A's value to address
-            }
-
-            // LDD only ever uses register HL when accessing indirectly
-            // and register A when accessing directly, so we don't care
-            // about any other destinations
-            _ => panic!("LDD: Invalid destination"),
-        }
-
-        match increment {
-            true => self.reg.inc_hl(),
-            false => self.reg.dec_hl(),
-        }
-
+        self.write_into(dst, src_value);
         8
     }
 
-    fn ld(&mut self, dst: Destination, src: Source) -> u8 {
+    fn ldd(&mut self, dst: Destination, src: Source) -> u8 {
         let src_value = self.value_from_source(src);
-        println!("source value is {:02x}", src_value);
+        self.write_into(dst, src_value);
+        self.reg.dec_hl();
+        8
+    }
 
+    fn ldi(&mut self, dst: Destination, src: Source) -> u8 {
+        let src_value = self.value_from_source(src);
+        self.write_into(dst, src_value);
+        self.reg.inc_hl();
+        8
+    }
+
+    fn write_into(&mut self, dst: Destination, src_value: usize) {
         match dst {
             Destination::Direct(target) => match target {
                 Target::Register8(reg) => self.reg.set_reg8(reg, src_value as u8),
@@ -1006,8 +982,6 @@ impl Cpu {
                 }
             },
         }
-
-        8
     }
 
     fn value_from_source(&self, src: Source) -> usize {

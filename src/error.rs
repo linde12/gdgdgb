@@ -8,6 +8,9 @@ pub enum GBError {
     #[error("Unable to write byte")]
     WriteByte,
 
+    #[error("Write into register")]
+    WriteIntoRegister,
+
     #[error("Unable to read byte")]
     ReadByte,
 

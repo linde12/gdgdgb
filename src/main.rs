@@ -33,8 +33,8 @@ fn main() -> anyhow::Result<()> {
             let op = cpu.read_instruction()?;
             println!("{:#06x}\t{:02x?}", cpu.pc(), op);
             cpu.execute_instruction(op);
-            let mut buf = String::new();
-            stdin().read_line(&mut buf)?;
+            // let mut buf = String::new();
+            // stdin().read_line(&mut buf)?;
         }
         _ => Err(GBError::BadCommand.into()),
     }
