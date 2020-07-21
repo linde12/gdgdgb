@@ -81,6 +81,17 @@ pub enum Condition {
     C,  // Carry
 }
 
+impl Condition {
+    fn is_satisfied(&self, flags: FlagsRegister) -> bool {
+            match self {
+                Condition::NZ => !flags.z,
+                Condition::NC => !flags.c,
+                Condition::Z => flags.z,
+                Condition::C => flags.c,
+            }
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub enum RegisterType {
     Register16(RegisterType16),
@@ -877,7 +888,49 @@ impl Cpu {
             Op::LD(dst, src) => self.ld(dst, src),
             Op::LDD(dst, src) => self.ldd(dst, src),
             Op::LDI(dst, src) => self.ldi(dst, src),
-            _ => 0,
+            // Op::NOP => {}
+            // Op::STOP => {}
+            // Op::RLA => {}
+            // Op::RRA => {}
+            // Op::RLCA => {}
+            // Op::RRCA => {}
+            // Op::CPL => {}
+            // Op::CCF => {}
+            // Op::DAA => {}
+            // Op::SCF => {}
+            // Op::HALT => {}
+            // Op::DI => {}
+            // Op::EI => {}
+            // Op::RETI => {}
+            Op::PREFIX => 0,
+            // Op::PUSH(_) => {}
+            // Op::POP(_) => {}
+            Op::CALL(condition, addr) => self.call(condition, addr),
+            // Op::RET(_) => {}
+            // Op::INC(_) => {}
+            // Op::DEC(_) => {}
+            // Op::LDi8(_, _) => {}
+            // Op::ADD(_, _) => {}
+            // Op::ADDi8(_, _) => {}
+            // Op::ADC(_, _) => {}
+            // Op::SUB(_, _) => {}
+            // Op::SBC(_, _) => {}
+            // Op::AND(_, _) => {}
+            // Op::OR(_, _) => {}
+            Op::XOR(dst, src) => self.xor(dst, src),
+            // Op::CP(_, _) => {}
+            // Op::RST(_) => {}
+            // Op::RLC(_) => {}
+            // Op::RRC(_) => {}
+            // Op::RL(_) => {}
+            // Op::RR(_) => {}
+            // Op::SLA(_) => {}
+            // Op::SRA(_) => {}
+            // Op::SWAP(_) => {}
+            // Op::SRL(_) => {}
+            // Op::RES(_, _) => {}
+            // Op::SET(_, _) => {}
+            instr => unimplemented!("instruction {:?} not implemented", instr),
         };
     }
 
@@ -916,7 +969,6 @@ impl Cpu {
     }
 
     fn bit(&mut self, n: u8, source: RegisterType) -> u8 {
-        println!("source is {:?}", source);
         let value = match source {
             RegisterType::Register8(reg) => self.reg.reg8(reg),
             // BIT n, (HL)
@@ -956,6 +1008,34 @@ impl Cpu {
         8
     }
 
+    fn call(&mut self, cond: Option<Condition>, addr: u16) -> u8 {
+        if let Some(condition) = cond {
+            let cpu_flags: FlagsRegister = self.reg.f.into();
+            if condition.is_satisfied(cpu_flags) {
+                // TODO: Push stack
+                self.reg.pc = addr as usize;
+                return 24;
+            }
+            12
+        } else {
+            // TODO: Push stack
+            self.reg.pc = addr as usize;
+            24
+        }
+    }
+
+    fn xor(&mut self, dst: Destination, src: Source) -> u8 {
+        let src_value = self.value_from_source(src) as u8;
+        let dst_value = self.value_from_destination(dst) as u8;
+
+        self.reg.a = src_value ^ dst_value;
+        if self.reg.a == 0 {
+            self.reg.set_flag(Flag::Zero, false);
+        }
+
+        8
+    }
+
     fn write_into(&mut self, dst: Destination, src_value: u16) {
         match dst {
             Destination::Direct(target) => match target {
@@ -978,6 +1058,14 @@ impl Cpu {
                         .write_byte(addr as usize + addr_offset as usize, src_value as u8);
                 }
             },
+        }
+    }
+
+    fn value_from_destination(&self, dst: Destination) -> u16 {
+        match dst {
+            Destination::Direct(target) => self.direct_from_target(target),
+            Destination::Indirect(target) => self.indirect_from_target(target) as u16,
+            Destination::Indexed(target, offset) => self.indexed_from_target(target, offset) as u16,
         }
     }
 
