@@ -50,13 +50,13 @@ impl From<u8> for FlagsRegister {
 
 macro_rules! reg_16 {
     ($name: ident, $reg1: ident, $reg2: ident) => {
-        pub fn $name(&self) -> usize {
-            ((self.$reg1 as usize) << 8) | (self.$reg2 as usize)
+        pub fn $name(&self) -> u16 {
+            ((self.$reg1 as u16) << 8) | (self.$reg2 as u16)
         }
     };
 
     ($name: ident) => {
-        pub fn $name(&self) -> usize {
+        pub fn $name(&self) -> u16 {
             self.$name
         }
     };
@@ -88,40 +88,40 @@ impl Register {
     reg_16!(de, d, e);
     reg_16!(hl, h, l);
 
-    pub fn set_reg16(&mut self, reg: RegisterType16, value: usize) {
+    pub fn set_reg16(&mut self, reg: RegisterType16, value: u16) {
         match reg {
-            // TODO: Store F register as bits instead of a struct
             RegisterType16::AF => {
-                self.a = (value & 0x00FF) as u8;
-                self.f = (value & 0xFF00 >> 8) as u8;
+                let [a, f] = value.to_be_bytes();
+                self.a = a;
+                self.f = a;
             }
             RegisterType16::BC => {
-                self.b = (value & 0x00FF) as u8;
-                self.c = (value & 0xFF00 >> 8) as u8;
+                let [b, c] = value.to_be_bytes();
+                self.b = b;
+                self.c = c;
             }
             RegisterType16::DE => {
-                self.d = (value & 0x00FF) as u8;
-                self.e = (value & 0xFF00 >> 8) as u8;
+                let [d, e] = value.to_be_bytes();
+                self.d = d;
+                self.e = e;
             }
             RegisterType16::HL => {
-                self.h = (value & 0x00FF) as u8;
-                self.l = (value & 0xFF00 >> 8) as u8;
+                let [h, l] = value.to_be_bytes();
+                self.h = l;
+                self.h = l;
             }
-            RegisterType16::SP => self.sp = value,
-            // TODO: Refactor HLD/HLI to not be a RegisterType?
-            _ => panic!("cannot set 8 bit regs or HLD, HLI with set_reg16"),
+            RegisterType16::SP => self.sp = value as usize,
         }
     }
 
-    pub fn reg16(&self, reg: RegisterType16) -> usize {
+    pub fn reg16(&self, reg: RegisterType16) -> u16 {
         match reg {
             // TODO: Correct endianess?
-            RegisterType16::AF => (((self.a as u16) << 8) | self.f as u16) as usize,
-            RegisterType16::BC => (((self.b as u16) << 8) | self.c as u16) as usize,
-            RegisterType16::DE => (((self.d as u16) << 8) | self.e as u16) as usize,
+            RegisterType16::AF => ((self.a as u16) << 8) | (self.f as u16) as u16,
+            RegisterType16::BC => ((self.b as u16) << 8) | (self.c as u16) as u16,
+            RegisterType16::DE => ((self.d as u16) << 8) | (self.e as u16) as u16,
             RegisterType16::HL => self.hl(),
-            RegisterType16::SP => self.sp,
-            _ => panic!("cannot get 8 bit regs or HLD, HLI with reg16"),
+            RegisterType16::SP => self.sp as u16,
         }
     }
 

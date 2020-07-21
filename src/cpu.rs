@@ -2,7 +2,7 @@ use crate::error::GBError;
 use crate::mmu::Mmu;
 use crate::register::{Flag, FlagsRegister, Register, RegisterType16, RegisterType8};
 
-const IO_REGISTER_OFFSET: usize = 0xff00;
+const IO_REGISTER_OFFSET: u16 = 0xff00;
 
 // Used to algorithmically parse opcode ranges
 static DEFAULT_DST_REGISTER_ORDER: [Destination; 8] = [
@@ -38,17 +38,17 @@ pub enum ProgramCounter {
 pub enum Destination {
     Direct(Target),                // Direct value, either a register or u16 address
     Indirect(IndirectTarget), // A pointer to an address, either from register or an address location
-    Indexed(IndexedTarget, usize), // Value of target+offset, where target can be a value in a register or a u16 and offset is a u16
+    Indexed(IndexedTarget, u16), // Value of target+offset, where target can be a value in a register or a u16 and offset is a u16
 }
 
 // See https://www.cs.helsinki.fi/u/kerola/tito/koksi_doc/memaddr.html
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Source {
     Immediate8(u8),
-    Immediate16(usize),
+    Immediate16(u16),
     Direct(Target),                // Direct value, either a register or u16 address
     Indirect(IndirectTarget), // A pointer to an address, either from register or an address location
-    Indexed(IndexedTarget, usize), // Value of target+offset, where target can be a value in a register or a u16 and offset is a u16
+    Indexed(IndexedTarget, u16), // Value of target+offset, where target can be a value in a register or a u16 and offset is a u16
     Offset(RegisterType16, i8),    // E.g. 0xF8 => LD HL, SP+i8
 }
 
@@ -100,7 +100,7 @@ pub enum Op {
     PREFIX, // 0xCB
     PUSH(RegisterType16),
     POP(RegisterType16),
-    CALL(Option<Condition>, usize),
+    CALL(Option<Condition>, u16),
     RET(Option<Condition>),
     JR(Option<Condition>, i8),
     INC(Destination),
@@ -167,7 +167,7 @@ impl Cpu {
         value
     }
 
-    pub fn word(&mut self) -> usize {
+    pub fn word(&mut self) -> u16 {
         let value = self.mmu.word(self.reg.pc);
         self.reg.pc += 2;
         value
@@ -954,7 +954,7 @@ impl Cpu {
         8
     }
 
-    fn write_into(&mut self, dst: Destination, src_value: usize) {
+    fn write_into(&mut self, dst: Destination, src_value: u16) {
         match dst {
             Destination::Direct(target) => match target {
                 Target::Register8(reg) => self.reg.set_reg8(reg, src_value as u8),
@@ -964,7 +964,7 @@ impl Cpu {
             Destination::Indirect(target) => match target {
                 IndirectTarget::Register16(reg) => {
                     let addr = self.reg.reg16(reg);
-                    self.mmu.write_word(addr, src_value);
+                    self.mmu.write_word(addr as usize, src_value);
                 }
                 IndirectTarget::Address(addr) => {
                     self.mmu.write_word(addr, src_value);
@@ -974,35 +974,35 @@ impl Cpu {
                 IndexedTarget::Register8(reg) => {
                     let addr_offset = self.reg.reg8(reg);
                     self.mmu
-                        .write_byte(addr + addr_offset as usize, src_value as u8);
+                        .write_byte(addr as usize + addr_offset as usize, src_value as u8);
                 }
                 IndexedTarget::Immediate8(addr_offset) => {
                     self.mmu
-                        .write_byte(addr + addr_offset as usize, src_value as u8);
+                        .write_byte(addr as usize + addr_offset as usize, src_value as u8);
                 }
             },
         }
     }
 
-    fn value_from_source(&self, src: Source) -> usize {
+    fn value_from_source(&self, src: Source) -> u16 {
         match src {
-            Source::Immediate8(n) => n as usize,
+            Source::Immediate8(n) => n as u16,
             Source::Immediate16(nn) => nn,
             Source::Direct(target) => self.direct_from_target(target),
-            Source::Indirect(target) => self.indirect_from_target(target) as usize,
-            Source::Indexed(target, offset) => self.indexed_from_target(target, offset) as usize,
+            Source::Indirect(target) => self.indirect_from_target(target) as u16,
+            Source::Indexed(target, offset) => self.indexed_from_target(target, offset) as u16,
             Source::Offset(reg, offset) => {
                 let v = self.reg.reg16(reg);
-                v.wrapping_add(offset as usize)
+                v.wrapping_add(offset as u16)
             }
         }
     }
 
-    fn direct_from_target(&self, target: Target) -> usize {
+    fn direct_from_target(&self, target: Target) -> u16 {
         match target {
-            Target::Register8(reg) => self.reg.reg8(reg) as usize,
+            Target::Register8(reg) => self.reg.reg8(reg) as u16,
             Target::Register16(reg) => self.reg.reg16(reg),
-            Target::Address(addr) => addr,
+            Target::Address(addr) => addr as u16,
         }
     }
 
@@ -1010,22 +1010,22 @@ impl Cpu {
         match target {
             IndirectTarget::Register16(reg) => {
                 let addr = self.reg.reg16(reg);
-                self.mmu.byte(addr)
+                self.mmu.byte(addr as usize)
             }
             IndirectTarget::Address(addr) => self.mmu.byte(addr),
         }
     }
 
-    fn indexed_from_target(&self, target: IndexedTarget, offset_addr: usize) -> u8 {
+    fn indexed_from_target(&self, target: IndexedTarget, offset_addr: u16) -> u8 {
         match target {
             // Target::Register8(reg) => ByteOrWord::Byte(self.value_from_reg(reg)),
             // // TODO: Refactor byte/word to always return, not Result
             // Target::Address(addr) => ByteOrWord::Byte(self.mmu.byte(addr + offset)),
             IndexedTarget::Register8(reg) => {
                 let offset = self.reg.reg8(reg);
-                self.mmu.byte(offset as usize + offset_addr)
+                self.mmu.byte(offset as usize + offset_addr as usize)
             }
-            IndexedTarget::Immediate8(n) => self.mmu.byte(n + offset_addr),
+            IndexedTarget::Immediate8(n) => self.mmu.byte(n + offset_addr as usize),
         }
     }
 

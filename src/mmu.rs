@@ -40,12 +40,12 @@ impl Mmu {
         }
     }
 
-    pub fn word(&self, index: usize) -> usize {
+    pub fn word(&self, index: usize) -> u16 {
         let first = self.byte(index);
         let second = self.byte(index + 1);
 
         // little-endian, least significant bit comes first, hence | and << 8
-        (first as usize) | ((second as usize) << 8)
+        ((second as u16) << 8) | (first as u16)
     }
 
     pub fn write_byte(&mut self, index: usize, b: u8) {
@@ -62,9 +62,10 @@ impl Mmu {
         }
     }
 
-    pub fn write_word(&mut self, index: usize, w: usize) {
-        self.write_byte(index, (w & 0xFF) as u8);
-        self.write_byte(index, (w >> 8) as u8);
+    pub fn write_word(&mut self, index: usize, w: u16) {
+        let [low, high] = w.to_be_bytes();
+        self.write_byte(index, low);
+        self.write_byte(index, high);
     }
 
     pub fn load_rom(&mut self, rom: Vec<u8>) -> Result<(), GBError> {
