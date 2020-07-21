@@ -5,7 +5,7 @@ use crate::register::{Flag, FlagsRegister, Register, RegisterType16, RegisterTyp
 const IO_REGISTER_OFFSET: u16 = 0xff00;
 
 // Used to algorithmically parse opcode ranges
-static DEFAULT_DST_REGISTER_ORDER: [Destination; 8] = [
+static DESTINATION_REGISTERS: [Destination; 8] = [
     Destination::Direct(Target::Register8(RegisterType8::B)),
     Destination::Direct(Target::Register8(RegisterType8::C)),
     Destination::Direct(Target::Register8(RegisterType8::D)),
@@ -16,7 +16,8 @@ static DEFAULT_DST_REGISTER_ORDER: [Destination; 8] = [
     Destination::Direct(Target::Register8(RegisterType8::A)),
 ];
 
-static DEFAULT_SRC_REGISTER_ORDER: [Source; 8] = [
+// Used to algorithmically parse opcode ranges
+static SOURCE_REGISTERS: [Source; 8] = [
     Source::Direct(Target::Register8(RegisterType8::B)),
     Source::Direct(Target::Register8(RegisterType8::C)),
     Source::Direct(Target::Register8(RegisterType8::D)),
@@ -25,6 +26,18 @@ static DEFAULT_SRC_REGISTER_ORDER: [Source; 8] = [
     Source::Direct(Target::Register8(RegisterType8::L)),
     Source::Indirect(RegisterType16::HL), // (HL)
     Source::Direct(Target::Register8(RegisterType8::A)),
+];
+
+// Used to algorithmically parse opcode ranges
+static REGISTERS: [RegisterType; 8] = [
+    RegisterType::Register8(RegisterType8::B),
+    RegisterType::Register8(RegisterType8::C),
+    RegisterType::Register8(RegisterType8::D),
+    RegisterType::Register8(RegisterType8::E),
+    RegisterType::Register8(RegisterType8::H),
+    RegisterType::Register8(RegisterType8::L),
+    RegisterType::Register16(RegisterType16::HL), // (HL)
+    RegisterType::Register8(RegisterType8::A),
 ];
 
 // See https://www.cs.helsinki.fi/u/kerola/tito/koksi_doc/memaddr.html
@@ -66,6 +79,12 @@ pub enum Condition {
     NC, // No Carry
     Z,  // Zero
     C,  // Carry
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum RegisterType {
+    Register16(RegisterType16),
+    Register8(RegisterType8),
 }
 
 #[derive(Debug)]
@@ -114,9 +133,9 @@ pub enum Op {
     SRA(Destination),
     SWAP(Destination),
     SRL(Destination),
-    BIT(u8, Source),
-    RES(u8, Source),
-    SET(u8, Source),
+    BIT(u8, RegisterType),
+    RES(u8, RegisterType),
+    SET(u8, RegisterType),
 }
 pub struct Cpu {
     mmu: Mmu,
@@ -287,8 +306,8 @@ impl Cpu {
                 let src_index = ((op & 0x0F) % 8) as usize;
 
                 Ok(Op::LD(
-                    DEFAULT_DST_REGISTER_ORDER[dst_index],
-                    DEFAULT_SRC_REGISTER_ORDER[src_index],
+                    DESTINATION_REGISTERS[dst_index],
+                    SOURCE_REGISTERS[src_index],
                 ))
             }
 
@@ -445,7 +464,7 @@ impl Cpu {
                 let index = (op & 0x0F) as usize; // Low nibble will be our index
                 Ok(Op::ADD(
                     Destination::Direct(Target::Register8(RegisterType8::A)),
-                    DEFAULT_SRC_REGISTER_ORDER[index],
+                    SOURCE_REGISTERS[index],
                 ))
             }
 
@@ -454,7 +473,7 @@ impl Cpu {
                 let index = ((op & 0x0F) - 8) as usize; // Low nibble with offset -8 will be our index
                 Ok(Op::ADC(
                     Destination::Direct(Target::Register8(RegisterType8::A)),
-                    DEFAULT_SRC_REGISTER_ORDER[index],
+                    SOURCE_REGISTERS[index],
                 ))
             }
 
@@ -463,7 +482,7 @@ impl Cpu {
                 let index = (op & 0x0F) as usize; // Low nibble will be our index
                 Ok(Op::SUB(
                     Destination::Direct(Target::Register8(RegisterType8::A)),
-                    DEFAULT_SRC_REGISTER_ORDER[index],
+                    SOURCE_REGISTERS[index],
                 ))
             }
 
@@ -472,7 +491,7 @@ impl Cpu {
                 let index = ((op & 0x0F) - 8) as usize; // Low nibble with offset -8 will be our index
                 Ok(Op::SBC(
                     Destination::Direct(Target::Register8(RegisterType8::A)),
-                    DEFAULT_SRC_REGISTER_ORDER[index],
+                    SOURCE_REGISTERS[index],
                 ))
             }
 
@@ -497,7 +516,7 @@ impl Cpu {
                 let index = (op & 0x0F) as usize; // Low nibble will be our index
                 Ok(Op::AND(
                     Destination::Direct(Target::Register8(RegisterType8::A)),
-                    DEFAULT_SRC_REGISTER_ORDER[index],
+                    SOURCE_REGISTERS[index],
                 ))
             }
 
@@ -506,7 +525,7 @@ impl Cpu {
                 let index = ((op & 0x0F) - 8) as usize; // Low nibble with offset -8 will be our index
                 Ok(Op::XOR(
                     Destination::Direct(Target::Register8(RegisterType8::A)),
-                    DEFAULT_SRC_REGISTER_ORDER[index],
+                    SOURCE_REGISTERS[index],
                 ))
             }
 
@@ -515,7 +534,7 @@ impl Cpu {
                 let index = (op & 0x0F) as usize; // Low nibble will be our index
                 Ok(Op::OR(
                     Destination::Direct(Target::Register8(RegisterType8::A)),
-                    DEFAULT_SRC_REGISTER_ORDER[index],
+                    SOURCE_REGISTERS[index],
                 ))
             }
 
@@ -524,7 +543,7 @@ impl Cpu {
                 let index = ((op & 0x0F) - 8) as usize; // Low nibble with offset -8 will be our index
                 Ok(Op::CP(
                     Destination::Direct(Target::Register8(RegisterType8::A)),
-                    DEFAULT_SRC_REGISTER_ORDER[index],
+                    SOURCE_REGISTERS[index],
                 ))
             }
 
@@ -763,56 +782,56 @@ impl Cpu {
             // RLC B->A
             0x00..=0x07 => {
                 let low = op & 0x0F;
-                let reg = DEFAULT_DST_REGISTER_ORDER[low as usize];
+                let reg = DESTINATION_REGISTERS[low as usize];
                 Ok(Op::RLC(reg))
             }
 
             // RRC B->A
             0x08..=0x0F => {
                 let low = op & 0x0F;
-                let reg = DEFAULT_DST_REGISTER_ORDER[low as usize];
+                let reg = DESTINATION_REGISTERS[low as usize];
                 Ok(Op::RRC(reg))
             }
 
             // RL B->A
             0x10..=0x17 => {
                 let low = op & 0x0F;
-                let reg = DEFAULT_DST_REGISTER_ORDER[low as usize];
+                let reg = DESTINATION_REGISTERS[low as usize];
                 Ok(Op::RL(reg))
             }
 
             // RR B->A
             0x18..=0x1F => {
                 let low = op & 0x0F;
-                let reg = DEFAULT_DST_REGISTER_ORDER[low as usize];
+                let reg = DESTINATION_REGISTERS[low as usize];
                 Ok(Op::RR(reg))
             }
 
             // SLA B->A
             0x20..=0x27 => {
                 let low = op & 0x0F;
-                let reg = DEFAULT_DST_REGISTER_ORDER[low as usize];
+                let reg = DESTINATION_REGISTERS[low as usize];
                 Ok(Op::SLA(reg))
             }
 
             // SLR B->A
             0x28..=0x2F => {
                 let low = op & 0x0F;
-                let reg = DEFAULT_DST_REGISTER_ORDER[low as usize];
+                let reg = DESTINATION_REGISTERS[low as usize];
                 Ok(Op::SRA(reg))
             }
 
             // SWAP B->A
             0x30..=0x37 => {
                 let low = op & 0x0F;
-                let reg = DEFAULT_DST_REGISTER_ORDER[low as usize];
+                let reg = DESTINATION_REGISTERS[low as usize];
                 Ok(Op::SWAP(reg))
             }
 
             // SRL B->A
             0x38..=0x3F => {
                 let low = op & 0x0F;
-                let reg = DEFAULT_DST_REGISTER_ORDER[low as usize];
+                let reg = DESTINATION_REGISTERS[low as usize];
                 Ok(Op::SRL(reg))
             }
 
@@ -824,7 +843,7 @@ impl Cpu {
                 // use low nibble as source index
                 let src_index = ((op & 0x0F) % 8) as usize;
 
-                Ok(Op::BIT(dst_index, DEFAULT_SRC_REGISTER_ORDER[src_index]))
+                Ok(Op::BIT(dst_index, REGISTERS[src_index]))
             }
 
             // RES index, $n
@@ -835,7 +854,7 @@ impl Cpu {
                 // use low nibble as source index
                 let src_index = ((op & 0x0F) % 8) as usize;
 
-                Ok(Op::RES(dst_index, DEFAULT_SRC_REGISTER_ORDER[src_index]))
+                Ok(Op::RES(dst_index, REGISTERS[src_index]))
             }
 
             // SET index, $n
@@ -846,7 +865,7 @@ impl Cpu {
                 // use low nibble as source index
                 let src_index = ((op & 0x0F) % 8) as usize;
 
-                Ok(Op::SET(dst_index, DEFAULT_SRC_REGISTER_ORDER[src_index]))
+                Ok(Op::SET(dst_index, REGISTERS[src_index]))
             }
         }
     }
@@ -896,20 +915,25 @@ impl Cpu {
         }
     }
 
-    fn bit(&mut self, n: u8, source: Source) -> u8 {
+    fn bit(&mut self, n: u8, source: RegisterType) -> u8 {
         println!("source is {:?}", source);
-        match source {
-            Source::Direct(Target::Register8(reg)) => {
-                let reg = self.reg.reg8(reg);
-                if reg & (1 << n) == 0 {
-                    self.reg.set_flag(Flag::Zero, true);
-                }
-                self.reg.set_flag(Flag::Negative, false);
-                self.reg.set_flag(Flag::HalfCarry, true);
-                8
+        let value = match source {
+            RegisterType::Register8(reg) => self.reg.reg8(reg),
+            // BIT n, (HL)
+            RegisterType::Register16(RegisterType16::HL) => {
+                let addr = self.reg.hl();
+                self.mmu.byte(addr as usize)
             }
             _ => panic!("invalid BIT target"),
+        };
+
+        if value & (1 << n) == 0 {
+            self.reg.set_flag(Flag::Zero, true);
         }
+        self.reg.set_flag(Flag::Negative, false);
+        self.reg.set_flag(Flag::HalfCarry, true);
+
+        8
     }
 
     fn ld(&mut self, dst: Destination, src: Source) -> u8 {
@@ -986,9 +1010,6 @@ impl Cpu {
 
     fn indexed_from_target(&self, target: IndexedTarget, offset_addr: u16) -> u8 {
         match target {
-            // Target::Register8(reg) => ByteOrWord::Byte(self.value_from_reg(reg)),
-            // // TODO: Refactor byte/word to always return, not Result
-            // Target::Address(addr) => ByteOrWord::Byte(self.mmu.byte(addr + offset)),
             IndexedTarget::Register8(reg) => {
                 let offset = self.reg.reg8(reg);
                 self.mmu.byte(offset as usize + offset_addr as usize)
