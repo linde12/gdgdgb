@@ -43,7 +43,7 @@ static REGISTERS: [RegisterType; 8] = [
 // See https://www.cs.helsinki.fi/u/kerola/tito/koksi_doc/memaddr.html
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Destination {
-    Direct(Target),                // Direct value, either a register or u16 address
+    Direct(Target),              // Direct value, either a register or u16 address
     Indirect(RegisterType16), // A pointer to an address, either from register or an address location
     Indexed(IndexedTarget, u16), // Value of target+offset, where target can be a value in a register or a u16 and offset is a u16
 }
@@ -53,10 +53,10 @@ pub enum Destination {
 pub enum Source {
     Immediate8(u8),
     Immediate16(u16),
-    Direct(Target),                // Direct value, either a register or u16 address
+    Direct(Target),              // Direct value, either a register or u16 address
     Indirect(RegisterType16), // A pointer to an address, either from register or an address location
     Indexed(IndexedTarget, u16), // Value of target+offset, where target can be a value in a register or a u16 and offset is a u16
-    Offset(RegisterType16, i8),    // E.g. 0xF8 => LD HL, SP+i8
+    Offset(RegisterType16, i8),  // E.g. 0xF8 => LD HL, SP+i8
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -83,12 +83,12 @@ pub enum Condition {
 
 impl Condition {
     fn is_satisfied(&self, flags: FlagsRegister) -> bool {
-            match self {
-                Condition::NZ => !flags.z,
-                Condition::NC => !flags.c,
-                Condition::Z => flags.z,
-                Condition::C => flags.c,
-            }
+        match self {
+            Condition::NZ => !flags.z,
+            Condition::NC => !flags.c,
+            Condition::Z => flags.z,
+            Condition::C => flags.c,
+        }
     }
 }
 
@@ -126,15 +126,15 @@ pub enum Op {
     LDD(Destination, Source),
     LDI(Destination, Source),
     LDi8(Destination, Source),
-    ADD(Destination, Source),
     ADDi8(RegisterType16, i8),
-    ADC(Destination, Source),
-    SUB(Destination, Source),
-    SBC(Destination, Source),
-    AND(Destination, Source),
-    OR(Destination, Source),
-    XOR(Destination, Source),
-    CP(Destination, Source),
+    ADD(Source),
+    ADC(Source),
+    SUB(Source),
+    SBC(Source),
+    AND(Source),
+    OR(Source),
+    XOR(Source),
+    CP(Source),
     RST(u8),
     RLC(Destination),
     RRC(Destination),
@@ -473,37 +473,25 @@ impl Cpu {
             // ADD A, $n
             0x80..=0x87 => {
                 let index = (op & 0x0F) as usize; // Low nibble will be our index
-                Ok(Op::ADD(
-                    Destination::Direct(Target::Register8(RegisterType8::A)),
-                    SOURCE_REGISTERS[index],
-                ))
+                Ok(Op::ADD(SOURCE_REGISTERS[index]))
             }
 
             // ADC A, $n
             0x88..=0x8F => {
                 let index = ((op & 0x0F) - 8) as usize; // Low nibble with offset -8 will be our index
-                Ok(Op::ADC(
-                    Destination::Direct(Target::Register8(RegisterType8::A)),
-                    SOURCE_REGISTERS[index],
-                ))
+                Ok(Op::ADC(SOURCE_REGISTERS[index]))
             }
 
             // SUB A, $n
             0x90..=0x97 => {
                 let index = (op & 0x0F) as usize; // Low nibble will be our index
-                Ok(Op::SUB(
-                    Destination::Direct(Target::Register8(RegisterType8::A)),
-                    SOURCE_REGISTERS[index],
-                ))
+                Ok(Op::SUB(SOURCE_REGISTERS[index]))
             }
 
             // SBC A, $n
             0x98..=0x9F => {
                 let index = ((op & 0x0F) - 8) as usize; // Low nibble with offset -8 will be our index
-                Ok(Op::SBC(
-                    Destination::Direct(Target::Register8(RegisterType8::A)),
-                    SOURCE_REGISTERS[index],
-                ))
+                Ok(Op::SBC(SOURCE_REGISTERS[index]))
             }
 
             // AND HL, $nn
@@ -516,46 +504,31 @@ impl Cpu {
                 ];
 
                 let index = ((op & 0xF0) >> 4) as usize; // High nibble as index
-                Ok(Op::AND(
-                    Destination::Direct(Target::Register16(RegisterType16::HL)),
-                    register_order[index],
-                ))
+                Ok(Op::AND(register_order[index]))
             }
 
             // AND A, $n
             0xA0..=0xA7 => {
                 let index = (op & 0x0F) as usize; // Low nibble will be our index
-                Ok(Op::AND(
-                    Destination::Direct(Target::Register8(RegisterType8::A)),
-                    SOURCE_REGISTERS[index],
-                ))
+                Ok(Op::AND(SOURCE_REGISTERS[index]))
             }
 
             // XOR A, $n
             0xA8..=0xAF => {
                 let index = ((op & 0x0F) - 8) as usize; // Low nibble with offset -8 will be our index
-                Ok(Op::XOR(
-                    Destination::Direct(Target::Register8(RegisterType8::A)),
-                    SOURCE_REGISTERS[index],
-                ))
+                Ok(Op::XOR(SOURCE_REGISTERS[index]))
             }
 
             // OR A, $n
             0xB0..=0xB7 => {
                 let index = (op & 0x0F) as usize; // Low nibble will be our index
-                Ok(Op::OR(
-                    Destination::Direct(Target::Register8(RegisterType8::A)),
-                    SOURCE_REGISTERS[index],
-                ))
+                Ok(Op::OR(SOURCE_REGISTERS[index]))
             }
 
             // CP A, $n
             0xB8..=0xBF => {
                 let index = ((op & 0x0F) - 8) as usize; // Low nibble with offset -8 will be our index
-                Ok(Op::CP(
-                    Destination::Direct(Target::Register8(RegisterType8::A)),
-                    SOURCE_REGISTERS[index],
-                ))
+                Ok(Op::CP(SOURCE_REGISTERS[index]))
             }
 
             // INC $nn
@@ -695,73 +668,49 @@ impl Cpu {
             // ADC A, u8
             0xce => {
                 let value = self.byte();
-                Ok(Op::ADC(
-                    Destination::Direct(Target::Register8(RegisterType8::A)),
-                    Source::Immediate8(value),
-                ))
+                Ok(Op::ADC(Source::Immediate8(value)))
             }
 
             // SBC A, u8
             0xde => {
                 let value = self.byte();
-                Ok(Op::SBC(
-                    Destination::Direct(Target::Register8(RegisterType8::A)),
-                    Source::Immediate8(value),
-                ))
+                Ok(Op::SBC(Source::Immediate8(value)))
             }
 
             // XOR A, u8
             0xee => {
                 let value = self.byte();
-                Ok(Op::XOR(
-                    Destination::Direct(Target::Register8(RegisterType8::A)),
-                    Source::Immediate8(value),
-                ))
+                Ok(Op::XOR(Source::Immediate8(value)))
             }
 
             // CP A, u8
             0xfe => {
                 let value = self.byte();
-                Ok(Op::CP(
-                    Destination::Direct(Target::Register8(RegisterType8::A)),
-                    Source::Immediate8(value),
-                ))
+                Ok(Op::CP(Source::Immediate8(value)))
             }
 
             // ADD A, u8
             0xc6 => {
                 let value = self.byte();
-                Ok(Op::ADD(
-                    Destination::Direct(Target::Register8(RegisterType8::A)),
-                    Source::Immediate8(value),
-                ))
+                Ok(Op::ADD(Source::Immediate8(value)))
             }
 
             // SUB A, u8
             0xd6 => {
                 let value = self.byte();
-                Ok(Op::SUB(
-                    Destination::Direct(Target::Register8(RegisterType8::A)),
-                    Source::Immediate8(value),
-                ))
+                Ok(Op::SUB(Source::Immediate8(value)))
             }
 
             // AND A, u8
             0xe6 => {
                 let value = self.byte();
-                Ok(Op::AND(
-                    Destination::Direct(Target::Register8(RegisterType8::A)),
-                    Source::Immediate8(value),
-                ))
+                Ok(Op::AND(Source::Immediate8(value)))
             }
 
             // OR A, u8
             0xf6 => {
                 let value = self.byte();
-                Ok(Op::OR(
-                    Destination::Direct(Target::Register8(RegisterType8::A)),
-                    Source::Immediate8(value),
-                ))
+                Ok(Op::OR(Source::Immediate8(value)))
             }
 
             // ADD SP, i8
@@ -914,10 +863,10 @@ impl Cpu {
             // Op::ADDi8(_, _) => {}
             // Op::ADC(_, _) => {}
             // Op::SUB(_, _) => {}
-            // Op::SBC(_, _) => {}
+            Op::SBC(src) => self.sbc(src, true),
             // Op::AND(_, _) => {}
             // Op::OR(_, _) => {}
-            Op::XOR(dst, src) => self.xor(dst, src),
+            Op::XOR(src) => self.xor(src),
             // Op::CP(_, _) => {}
             // Op::RST(_) => {}
             // Op::RLC(_) => {}
@@ -1024,14 +973,35 @@ impl Cpu {
         }
     }
 
-    fn xor(&mut self, dst: Destination, src: Source) -> u8 {
+    fn xor(&mut self, src: Source) -> u8 {
         let src_value = self.value_from_source(src) as u8;
-        let dst_value = self.value_from_destination(dst) as u8;
 
-        self.reg.a = src_value ^ dst_value;
+        self.reg.a = src_value ^ self.reg.a;
         if self.reg.a == 0 {
             self.reg.set_flag(Flag::Zero, false);
         }
+
+        8
+    }
+
+    fn sbc(&mut self, src: Source, use_carry: bool) -> u8 {
+        let src_value = self.value_from_source(src) as u8;
+        let carry = if use_carry && self.reg.flag(Flag::Carry) {
+            1
+        } else {
+            0
+        };
+
+        let a = self.reg.a;
+        let result = a.wrapping_sub(src_value).wrapping_sub(carry);
+
+        self.reg.set_flag(Flag::Zero, result == 0);
+        self.reg.set_flag(Flag::Negative, true);
+        self.reg
+            .set_flag(Flag::HalfCarry, (a & 0x0F) + (src_value & 0x0F) > 0x0F);
+        self.reg
+            .set_flag(Flag::Carry, (a as u16) < (src_value as u16) + carry as u16);
+        self.reg.a = result;
 
         8
     }
@@ -1046,7 +1016,7 @@ impl Cpu {
             Destination::Indirect(reg) => {
                 let addr = self.reg.reg16(reg);
                 self.mmu.write_word(addr as usize, src_value);
-            },
+            }
             Destination::Indexed(target, addr) => match target {
                 IndexedTarget::Register8(reg) => {
                     let addr_offset = self.reg.reg8(reg);

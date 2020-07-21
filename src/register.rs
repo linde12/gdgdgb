@@ -176,4 +176,13 @@ impl Register {
             }
         }
     }
+    pub fn flag(&mut self, flag: Flag) -> bool {
+        let flags: FlagsRegister = self.f.into();
+        match flag {
+            Flag::Zero => flags.z,
+            Flag::Negative => flags.n,
+            Flag::HalfCarry => flags.h,
+            Flag::Carry => flags.c,
+        }
+    }
 }
