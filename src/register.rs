@@ -160,11 +160,20 @@ impl Register {
     }
 
     pub fn set_flag(&mut self, flag: Flag, value: bool) {
-        match flag {
-            Flag::Zero => self.f |= 0b1000_0000,
-            Flag::Negative => self.f |= 0b0100_0000,
-            Flag::HalfCarry => self.f |= 0b0010_0000,
-            Flag::Carry => self.f |= 0b0001_0000,
+        if value == true {
+            match flag {
+                Flag::Zero => self.f |= 0b1000_0000,
+                Flag::Negative => self.f |= 0b0100_0000,
+                Flag::HalfCarry => self.f |= 0b0010_0000,
+                Flag::Carry => self.f |= 0b0001_0000,
+            }
+        } else {
+            match flag {
+                Flag::Zero => self.f &= 0b0111_1111,
+                Flag::Negative => self.f &= 0b1011_1111,
+                Flag::HalfCarry => self.f &= 0b1101_1111,
+                Flag::Carry => self.f &= 0b1110_1111,
+            }
         }
     }
 }

@@ -149,14 +149,6 @@ impl Cpu {
         }
     }
 
-    // pub fn hl(&self) -> usize {
-    //     (((self.h as u16) << 8) + self.l as u16) as usize
-    // }
-
-    // pub fn write_hl(&mut self, value: u16) {
-    //     self.l = (value & 0x0F) as u8;
-    //     self.h = ((value & 0xF0) >> 8) as u8;
-    // }
     pub fn pc(&self) -> usize {
         self.reg.pc
     }
@@ -922,7 +914,6 @@ impl Cpu {
         match source {
             Source::Direct(Target::Register8(reg)) => {
                 let reg = self.reg.reg8(reg);
-                let cpu_flags: FlagsRegister = self.reg.f.into();
                 if reg & (1 << n) == 0 {
                     self.reg.set_flag(Flag::Zero, true);
                 }
