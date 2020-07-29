@@ -852,11 +852,11 @@ impl Cpu {
             // Op::EI => {}
             // Op::RETI => {}
             Op::PREFIX => 0,
-            // Op::PUSH(_) => {}
-            // Op::POP(_) => {}
+            Op::PUSH(reg) => self.push(reg),
+            Op::POP(reg) => self.pop(reg),
             Op::CALL(condition, addr) => self.call(condition, addr),
             // Op::RET(_) => {}
-            // Op::INC(_) => {}
+            Op::INC(dst) => self.inc(dst),
             // Op::DEC(_) => {}
             // Op::LDi8(_, _) => {}
             // Op::ADD(_, _) => {}
@@ -1002,6 +1002,34 @@ impl Cpu {
         self.reg
             .set_flag(Flag::Carry, (a as u16) < (src_value as u16) + carry as u16);
         self.reg.a = result;
+
+        8
+    }
+
+    fn inc(&mut self, dst: Destination) -> u8 {
+        let value = self.value_from_destination(dst) as u8;
+        let result = value.wrapping_add(1);
+        self.reg.set_flag(Flag::Zero, result == 0);
+        self.reg.set_flag(Flag::HalfCarry, (value & 0x0F) + 1 > (value & 0x0F));
+        self.reg.set_flag(Flag::Negative, false);
+        self.write_into(dst, result as u16);
+
+        8
+    }
+
+    fn push(&mut self, reg: RegisterType16) -> u8 {
+        self.reg.sp -= 2;
+
+        let value = self.reg.reg16(reg);
+        self.mmu.write_word(self.reg.sp, value);
+
+        8
+    }
+
+    fn pop(&mut self, reg: RegisterType16) -> u8 {
+        let value = self.mmu.word(self.reg.sp);
+        self.reg.sp += 2;
+        self.reg.set_reg16(reg, value);
 
         8
     }
