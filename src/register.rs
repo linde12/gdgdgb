@@ -37,12 +37,10 @@ pub struct FlagsRegister {
 
 impl From<u8> for FlagsRegister {
     fn from(flags: u8) -> Self {
-        let flags = flags >> 4;
-
-        let z = flags >> 3 == 1;
-        let n = flags & 0b0100 >> 2 == 1;
-        let h = flags & 0b0010 >> 1 == 1;
-        let c = flags & 0b0001 == 1;
+        let z = flags >> 7 == 1;
+        let n = (flags & 0b0100_0000) >> 6 == 1;
+        let h = (flags & 0b0010_0000) >> 5 == 1;
+        let c = (flags & 0b0001_0000) >> 4 == 1;
 
         FlagsRegister { z, n, h, c }
     }
@@ -79,6 +77,7 @@ pub struct Register {
 impl Register {
     pub fn new() -> Self {
         Register {
+            f: 0b1000_0000,
             ..Default::default()
         }
     }
@@ -107,8 +106,8 @@ impl Register {
             }
             RegisterType16::HL => {
                 let [h, l] = value.to_be_bytes();
-                self.h = l;
-                self.h = l;
+                self.h = h;
+                self.l = l;
             }
             RegisterType16::SP => self.sp = value as usize,
         }
@@ -176,7 +175,7 @@ impl Register {
             }
         }
     }
-    pub fn flag(&mut self, flag: Flag) -> bool {
+    pub fn flag(&self, flag: Flag) -> bool {
         let flags: FlagsRegister = self.f.into();
         match flag {
             Flag::Zero => flags.z,
@@ -184,5 +183,55 @@ impl Register {
             Flag::HalfCarry => flags.h,
             Flag::Carry => flags.c,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn set_flag() {
+        let mut regs = Register::new();
+        assert!(regs.f == 0);
+
+        let mut regs = Register::new();
+        regs.set_flag(Flag::Zero, true);
+        assert!(regs.f == 0x80);
+
+        let mut regs = Register::new();
+        regs.set_flag(Flag::Negative, true);
+        assert!(regs.f == 0x40);
+
+        let mut regs = Register::new();
+        regs.set_flag(Flag::HalfCarry, true);
+        assert!(regs.f == 0x20);
+
+        let mut regs = Register::new();
+        regs.set_flag(Flag::Carry, true);
+        assert!(regs.f == 0x10);
+    }
+
+    #[test]
+    fn get_flag() {
+        let mut regs = Register::new();
+        regs.set_flag(Flag::Zero, true);
+        let flags: FlagsRegister = regs.f.into();
+        assert!(flags.z == true);
+
+        let mut regs = Register::new();
+        regs.set_flag(Flag::Negative, true);
+        let flags: FlagsRegister = regs.f.into();
+        assert!(flags.n == true);
+
+        let mut regs = Register::new();
+        regs.set_flag(Flag::HalfCarry, true);
+        let flags: FlagsRegister = regs.f.into();
+        assert!(flags.h == true);
+
+        let mut regs = Register::new();
+        regs.set_flag(Flag::Carry, true);
+        let flags: FlagsRegister = regs.f.into();
+        assert!(flags.c == true);
     }
 }

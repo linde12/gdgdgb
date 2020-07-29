@@ -1,6 +1,7 @@
 use crate::error::GBError;
 use crate::mmu::Mmu;
 use crate::register::{Flag, FlagsRegister, Register, RegisterType16, RegisterType8};
+use std::fmt;
 
 const IO_REGISTER_OFFSET: u16 = 0xff00;
 
@@ -98,7 +99,7 @@ pub enum RegisterType {
     Register8(RegisterType8),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum Op {
     NOP,
     STOP,
@@ -148,9 +149,10 @@ pub enum Op {
     RES(u8, RegisterType),
     SET(u8, RegisterType),
 }
+
 pub struct Cpu {
     mmu: Mmu,
-    reg: Register,
+    pub reg: Register,
     // PREFIX, 0xCB
     cb: bool,
 }
@@ -837,7 +839,11 @@ impl Cpu {
             Op::LDI(dst, src) => self.ldi(dst, src),
             // Op::NOP => {}
             // Op::STOP => {}
-            // Op::RLA => {}
+            Op::RLA => {
+                let ticks = self.rl(Destination::Direct(Target::Register8(RegisterType8::A)));
+                self.reg.set_flag(Flag::Zero, false);
+                ticks
+            }
             // Op::RRA => {}
             // Op::RLCA => {}
             // Op::RRCA => {}
@@ -853,9 +859,9 @@ impl Cpu {
             Op::PUSH(reg) => self.push(reg),
             Op::POP(reg) => self.pop(reg),
             Op::CALL(condition, addr) => self.call(condition, addr),
-            // Op::RET(_) => {}
+            Op::RET(cond) => self.ret(cond),
             Op::INC(dst) => self.inc(dst),
-            // Op::DEC(_) => {}
+            Op::DEC(dst) => self.dec(dst),
             // Op::LDi8(_, _) => {}
             // Op::ADD(_, _) => {}
             // Op::ADDi8(_, _) => {}
@@ -869,7 +875,7 @@ impl Cpu {
             // Op::RST(_) => {}
             // Op::RLC(_) => {}
             // Op::RRC(_) => {}
-            // Op::RL(_) => {}
+            Op::RL(dst) => self.rl(dst),
             // Op::RR(_) => {}
             // Op::SLA(_) => {}
             // Op::SRA(_) => {}
@@ -882,7 +888,7 @@ impl Cpu {
     }
 
     fn jr(&mut self, flag: Option<Condition>, offset: i8) -> u8 {
-        let op_pc = self.reg.pc - 1;
+        let op_pc = self.reg.pc;
         let addr = op_pc.wrapping_add(offset as usize);
         if let Some(flag) = flag {
             let cpu_flags: FlagsRegister = self.reg.f.into();
@@ -926,7 +932,8 @@ impl Cpu {
             _ => panic!("invalid BIT target"),
         };
 
-        if value & (1 << n) == 0 {
+        let is_bit_zero = value & (1 << n) == 0;
+        if is_bit_zero {
             self.reg.set_flag(Flag::Zero, true);
         }
         self.reg.set_flag(Flag::Negative, false);
@@ -959,13 +966,13 @@ impl Cpu {
         if let Some(condition) = cond {
             let cpu_flags: FlagsRegister = self.reg.f.into();
             if condition.is_satisfied(cpu_flags) {
-                // TODO: Push stack
+                self.push_stack(self.reg.pc as u16);
                 self.reg.pc = addr as usize;
                 return 24;
             }
             12
         } else {
-            // TODO: Push stack
+            self.push_stack(self.reg.pc as u16);
             self.reg.pc = addr as usize;
             24
         }
@@ -1008,18 +1015,40 @@ impl Cpu {
         let value = self.value_from_destination(dst) as u8;
         let result = value.wrapping_add(1);
         self.reg.set_flag(Flag::Zero, result == 0);
-        self.reg.set_flag(Flag::HalfCarry, (value & 0x0F) + 1 > (value & 0x0F));
+        // if lower nibble (e.g. 1111) + 1 is greater than 0x0F(1111), the upper nibble will be
+        // affected (e.g. 0001 0000) and we set half carry
+        self.reg
+            .set_flag(Flag::HalfCarry, (value & 0x0F) + 1 > 0x0F);
         self.reg.set_flag(Flag::Negative, false);
         self.write_into(dst, result as u16);
 
         8
     }
 
-    fn push(&mut self, reg: RegisterType16) -> u8 {
-        self.reg.sp -= 2;
+    fn dec(&mut self, dst: Destination) -> u8 {
+        let value = self.value_from_destination(dst) as u8;
+        let result = value.wrapping_sub(1);
+        self.reg.set_flag(Flag::Zero, result == 0);
+        // if lower nibble is 0000 and we are trying to subtract one, then we have to borrow from
+        // upper nibble. So we set HalfCarry. E.g.
+        // 30h - 1h -> 0011 0000
+        //           - 0000 0001
+        //             0010 1111 -> 2F (upper nibble affected)
+        self.reg.set_flag(Flag::HalfCarry, (value & 0x0F) == 0);
+        self.reg.set_flag(Flag::Negative, true);
+        self.write_into(dst, result as u16);
 
+        8
+    }
+
+    fn push(&mut self, reg: RegisterType16) -> u8 {
         let value = self.reg.reg16(reg);
-        self.mmu.write_word(self.reg.sp, value);
+        self.push_stack(value as u16)
+    }
+
+    fn push_stack(&mut self, word: u16) -> u8 {
+        self.reg.sp -= 2;
+        self.mmu.write_word(self.reg.sp, word);
 
         8
     }
@@ -1028,6 +1057,36 @@ impl Cpu {
         let value = self.mmu.word(self.reg.sp);
         self.reg.sp += 2;
         self.reg.set_reg16(reg, value);
+
+        8
+    }
+
+    fn ret(&mut self, cond: Option<Condition>) -> u8 {
+        let cpu_flags: FlagsRegister = self.reg.f.into();
+        let ok = match cond {
+            Some(cond) => cond.is_satisfied(cpu_flags),
+            None => true,
+        };
+
+        if ok {
+            let value = self.mmu.word(self.reg.sp) as usize;
+            self.reg.sp += 2;
+            self.reg.pc = value;
+        }
+
+        8
+    }
+
+    fn rl(&mut self, dst: Destination) -> u8 {
+        let value = self.value_from_destination(dst) as u8;
+        let will_carry = value & 0x80 == 0x80; // is the MSB 1? then we will carry
+        let result = (value << 1) | if self.reg.flag(Flag::Carry) { 1 } else { 0 };
+
+        self.reg.set_flag(Flag::Zero, result == 0);
+        self.reg.set_flag(Flag::Negative, false);
+        self.reg.set_flag(Flag::HalfCarry, false);
+        self.reg.set_flag(Flag::Carry, will_carry);
+        self.write_into(dst, result as u16);
 
         8
     }
@@ -1100,5 +1159,38 @@ impl Cpu {
             }
             IndexedTarget::Immediate8(n) => self.mmu.byte(n + offset_addr as usize),
         }
+    }
+}
+
+impl fmt::Display for Cpu {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            concat!(
+                "PC: 0x{:04X}\n",
+                "SP: 0x{:04X}\n",
+                "AF: 0x{:04X}\n",
+                "BC: 0x{:04X}\n",
+                "DE: 0x{:04X}\n",
+                "HL: 0x{:04X}\n",
+                "------------\n",
+                "Z: {}\n",
+                "N: {}\n",
+                "H: {}\n",
+                "C: {}\n",
+                "F: {:08b}",
+            ),
+            self.reg.pc,
+            self.reg.sp,
+            self.reg.af(),
+            self.reg.bc(),
+            self.reg.de(),
+            self.reg.hl(),
+            self.reg.flag(Flag::Zero),
+            self.reg.flag(Flag::Negative),
+            self.reg.flag(Flag::HalfCarry),
+            self.reg.flag(Flag::Carry),
+            self.reg.f,
+        )
     }
 }

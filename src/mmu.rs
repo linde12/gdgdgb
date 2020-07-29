@@ -1,5 +1,7 @@
 use crate::error::GBError;
 
+static BOOT_ROM: &[u8; 256] = include_bytes!("../DMG_ROM.bin");
+
 // See https://gbdev.gg8.se/wiki/articles/Memory_Map
 pub struct Mmu {
     rom: [u8; 0x8000], // consists of 32k, lower 16k is static while the uppe 16k is a switchable rom bank from cartridge
@@ -28,7 +30,8 @@ impl Mmu {
 
     pub fn byte(&self, index: usize) -> u8 {
         match index {
-            0x0000 ..= 0x7FFF => self.rom[index],
+            0x0000 ..= 0x00FF => if self.dmg_rom_enabled() { BOOT_ROM[index] } else { self.rom[index] }
+            0x0100 ..= 0x7FFF => self.rom[index],
             0x8000 ..= 0x9FFF => self.vram[index - 0x8000],
             0xA000 ..= 0xBFFF => self.ext_ram[index - 0xA000],
             0xC000 ..= 0xDFFF => self.ram[index - 0xC000],
@@ -40,12 +43,12 @@ impl Mmu {
         }
     }
 
+    fn dmg_rom_enabled(&self) -> bool {
+        self.byte(0xFF50) != 1
+    }
     pub fn word(&self, index: usize) -> u16 {
-        let first = self.byte(index);
-        let second = self.byte(index + 1);
-
         // little-endian, least significant bit comes first, hence | and << 8
-        ((second as u16) << 8) | (first as u16)
+        (self.byte(index) as u16) | ((self.byte(index + 1) as u16) << 8)
     }
 
     pub fn write_byte(&mut self, index: usize, b: u8) {
@@ -63,19 +66,17 @@ impl Mmu {
     }
 
     pub fn write_word(&mut self, index: usize, w: u16) {
-        let [low, high] = w.to_be_bytes();
+        let [high, low] = w.to_be_bytes();
         self.write_byte(index, low);
-        self.write_byte(index, high);
+        self.write_byte(index + 1, high);
     }
 
     pub fn load_rom(&mut self, rom: Vec<u8>) -> Result<(), GBError> {
-        if rom.len() > 4096 {
-            return Err(GBError::LoadRom("rom size too large".into()));
-        }
-
         // TODO: Revisit later, nicer way?
         for (i, item) in rom.iter().enumerate() {
-            self.write_byte(i, *item);
+            if i <= 0x8000 {
+                self.write_byte(i, *item);
+            }
         }
         Ok(())
     }
