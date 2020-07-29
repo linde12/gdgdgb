@@ -151,7 +151,6 @@ pub enum Op {
 pub struct Cpu {
     mmu: Mmu,
     reg: Register,
-    stack: [usize; 16],
     // PREFIX, 0xCB
     cb: bool,
 }
@@ -161,7 +160,6 @@ impl Cpu {
         Cpu {
             reg: Register::new(),
             mmu,
-            stack: [0usize; 16],
             cb: false,
         }
     }
