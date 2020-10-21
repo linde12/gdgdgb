@@ -71,14 +71,8 @@ impl Mmu {
         self.write_byte(index + 1, high);
     }
 
-    pub fn load_rom(&mut self, rom: Vec<u8>) -> Result<(), GBError> {
-        // TODO: Revisit later, nicer way?
-        for (i, item) in rom.iter().enumerate() {
-            if i <= 0x8000 {
-                self.write_byte(i, *item);
-            }
-        }
-        Ok(())
+    pub fn load_rom(&mut self, rom: Vec<u8>) {
+        self.rom.clone_from_slice(&rom[..0x8000]);
     }
 
     pub fn clear_vram(&mut self) {

@@ -21,7 +21,7 @@ fn main() -> anyhow::Result<()> {
     file.read_to_end(&mut rom).context("unable to read rom")?;
 
     let mut mmu = Mmu::new();
-    mmu.load_rom(rom)?;
+    mmu.load_rom(rom);
     let mut cpu = Cpu::new(mmu);
 
     match cmd.as_str() {
