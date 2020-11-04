@@ -124,7 +124,7 @@ pub enum Condition {
 
 // TODO: Impl Rust traits From or Into instead?
 impl Condition {
-    fn is_satisfied(&self, flags: FlagsRegister) -> bool {
+    pub fn is_satisfied(&self, flags: FlagsRegister) -> bool {
         match self {
             Condition::NZ => !flags.z,
             Condition::NC => !flags.c,
