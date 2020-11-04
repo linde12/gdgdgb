@@ -333,7 +333,7 @@ impl Cpu {
             // Op::ADC(_, _) => {}
             // Op::SUB(_, _) => {}
             // Op::SBC(src) => self.sbc(src, true),
-            // Op::AND(_, _) => {}
+            Op::AND(target) => arithmetic!(target, self.and),
             Op::OR(target) => arithmetic!(target, self.or),
             Op::XOR(target) => arithmetic!(target, self.xor),
             Op::CP(target) => arithmetic!(target, self.cmp),
@@ -377,6 +377,14 @@ impl Cpu {
         self.reg.set_flag(Flag::Zero, self.reg.a == 0);
         self.reg.set_flag(Flag::Negative, false);
         self.reg.set_flag(Flag::HalfCarry, false);
+        self.reg.set_flag(Flag::Carry, false);
+    }
+
+    fn and(&mut self, value: u8) {
+        self.reg.a = self.reg.a & value;
+        self.reg.set_flag(Flag::Zero, self.reg.a == 0);
+        self.reg.set_flag(Flag::Negative, false);
+        self.reg.set_flag(Flag::HalfCarry, true);
         self.reg.set_flag(Flag::Carry, false);
     }
 
