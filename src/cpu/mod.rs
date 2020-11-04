@@ -56,12 +56,6 @@ impl Cpu {
         }
     }
 
-    pub fn byte(&mut self) -> u8 {
-        let value = self.mmu.byte(self.pc);
-        self.pc += 1;
-        value
-    }
-
     pub fn peek_byte(&mut self) -> u8 {
         self.mmu.byte(self.pc + 1)
     }
@@ -70,14 +64,8 @@ impl Cpu {
         self.mmu.word(self.pc + 1)
     }
 
-    pub fn word(&mut self) -> u16 {
-        let value = self.mmu.word(self.pc);
-        self.pc += 2;
-        value
-    }
-
     pub fn read_instruction(&mut self) -> Option<Result<Op, GBError>> {
-        let byte = self.byte();
+        let byte = self.mmu.byte(self.pc);
         let is_prefix = byte == 0xCB;
         if is_prefix {
             self.cb = true;
@@ -182,7 +170,8 @@ impl Cpu {
     // }
 
     pub fn execute_instruction(&mut self, instruction: Op) {
-        match instruction {
+        // TODO: use _cycles
+        let (next_pc, _cycles) = match instruction {
             // Op::JR(flag, offset) => self.jr(flag, offset),
             // Op::BIT(n, src) => self.bit(n, src),
             Op::LD(load_type) => {
@@ -361,6 +350,8 @@ impl Cpu {
             // Op::SET(_, _) => {}
             instr => unimplemented!("instruction {:?} not implemented", instr),
         };
+
+        self.pc = next_pc;
     }
 
     fn cmp(&mut self, value: u8) {
