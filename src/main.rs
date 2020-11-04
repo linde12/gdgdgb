@@ -26,11 +26,9 @@ fn main() -> anyhow::Result<()> {
     match cmd.as_str() {
         "d" | "disassemble" | "disasm" => loop {
             let pc = cpu.pc;
-            if let Some(op) = cpu.read_instruction() {
-                let op = op?;
-                println!("0x{:04X}\t{:02X?}", pc, op);
-                cpu.execute_instruction(op);
-            }
+            let op = cpu.read_instruction()?;
+            println!("0x{:04X}\t{:02X?}", pc, op);
+            cpu.execute_instruction(op);
 
             // let mut buf = String::new();
             // while buf != "\n" {
@@ -42,10 +40,8 @@ fn main() -> anyhow::Result<()> {
             // }
         },
         "r" | "run" => loop {
-            if let Some(op) = cpu.read_instruction() {
-                let op = op?;
-                cpu.execute_instruction(op);
-            }
+            let op = cpu.read_instruction()?;
+            cpu.execute_instruction(op);
         }
         _ => Err(GBError::BadCommand.into()),
     }
