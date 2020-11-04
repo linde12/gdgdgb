@@ -73,7 +73,8 @@ impl Mmu {
     }
 
     pub fn load_rom(&mut self, rom: Vec<u8>) {
-        self.rom.clone_from_slice(&rom[..0x8000]);
+        let size = if rom.len() > 0x8000 { 0x8000 } else { rom.len() };
+        self.rom[..size].clone_from_slice(&rom[..size]);
     }
 
     pub fn clear_vram(&mut self) {
