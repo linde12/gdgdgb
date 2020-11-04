@@ -334,7 +334,7 @@ impl Cpu {
             // Op::SUB(_, _) => {}
             // Op::SBC(src) => self.sbc(src, true),
             // Op::AND(_, _) => {}
-            // Op::OR(_, _) => {}
+            Op::OR(target) => arithmetic!(target, self.or),
             Op::XOR(target) => arithmetic!(target, self.xor),
             Op::CP(target) => arithmetic!(target, self.cmp),
             // Op::RST(_) => {}
@@ -366,6 +366,14 @@ impl Cpu {
 
     fn xor(&mut self, value: u8) {
         self.reg.a = self.reg.a ^ value;
+        self.reg.set_flag(Flag::Zero, self.reg.a == 0);
+        self.reg.set_flag(Flag::Negative, false);
+        self.reg.set_flag(Flag::HalfCarry, false);
+        self.reg.set_flag(Flag::Carry, false);
+    }
+
+    fn or(&mut self, value: u8) {
+        self.reg.a = self.reg.a | value;
         self.reg.set_flag(Flag::Zero, self.reg.a == 0);
         self.reg.set_flag(Flag::Negative, false);
         self.reg.set_flag(Flag::HalfCarry, false);
