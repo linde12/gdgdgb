@@ -335,7 +335,7 @@ impl Cpu {
             // Op::SBC(src) => self.sbc(src, true),
             // Op::AND(_, _) => {}
             // Op::OR(_, _) => {}
-            // Op::XOR(src) => self.xor(src),
+            Op::XOR(target) => arithmetic!(target, self.xor),
             Op::CP(target) => arithmetic!(target, self.cmp),
             // Op::RST(_) => {}
             // Op::RLC(_) => {}
@@ -362,6 +362,14 @@ impl Cpu {
         // carrying
         self.reg.set_flag(Flag::HalfCarry, (self.reg.a & 0x0F) < (value & 0x0F));
         self.reg.set_flag(Flag::Carry, self.reg.a < value);
+    }
+
+    fn xor(&mut self, value: u8) {
+        self.reg.a = self.reg.a ^ value;
+        self.reg.set_flag(Flag::Zero, self.reg.a == 0);
+        self.reg.set_flag(Flag::Negative, false);
+        self.reg.set_flag(Flag::HalfCarry, false);
+        self.reg.set_flag(Flag::Carry, false);
     }
 
     // fn jr(&mut self, flag: Option<Condition>, offset: i8) -> u8 {
