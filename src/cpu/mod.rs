@@ -6,6 +6,12 @@ use register::{Flag, Register};
 use op::*;
 use std::fmt;
 
+/// Performs ALU operation on the passed `ArithmeticTarget`. The second parameter specifies the
+/// operation to be performed.
+/// # Example:
+/// ```rust
+/// arithmetic!(target, self.xor);
+/// ```
 macro_rules! arithmetic {
     ($target:ident, $self:ident.$fn:ident) => {
         {
