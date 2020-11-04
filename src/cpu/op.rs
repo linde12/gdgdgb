@@ -204,8 +204,6 @@ impl Op {
             0x3F => Some(Op::CCF),
             0x27 => Some(Op::DAA),
             0x37 => Some(Op::SCF),
-            0xF3 => Some(Op::DI),
-            0xFB => Some(Op::EI),
 
             // POP
             0xC1 => Some(Op::POP(StackTarget::BC)),
