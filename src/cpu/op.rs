@@ -151,7 +151,6 @@ pub enum Op {
     DI,
     EI,
     RETI,   // Enables interrupts after return operation
-    PREFIX, // 0xCB
     PUSH(StackTarget),
     POP(StackTarget),
     CALL(Condition),
