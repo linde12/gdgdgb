@@ -6,6 +6,36 @@ use register::{Flag, Register};
 use op::*;
 use std::fmt;
 
+macro_rules! arithmetic {
+    ($target:ident, $self:ident.$fn:ident) => {
+        {
+            match $target {
+                ArithmeticTarget::A => $self.$fn($self.reg.a),
+                ArithmeticTarget::B => $self.$fn($self.reg.b),
+                ArithmeticTarget::C => $self.$fn($self.reg.c),
+                ArithmeticTarget::D => $self.$fn($self.reg.d),
+                ArithmeticTarget::E => $self.$fn($self.reg.e),
+                ArithmeticTarget::H => $self.$fn($self.reg.h),
+                ArithmeticTarget::L => $self.$fn($self.reg.l),
+                ArithmeticTarget::D8 => {
+                    let byte = $self.peek_byte();
+                    $self.$fn(byte);
+                },
+                ArithmeticTarget::HLIndirect => {
+                    let value = $self.mmu.byte($self.reg.hl());
+                    $self.$fn(value);
+                }
+            };
+
+            match $target {
+                ArithmeticTarget::D8  => ($self.pc.wrapping_add(2), 8),
+                ArithmeticTarget::HLIndirect => ($self.pc.wrapping_add(1), 8),
+                _ => ($self.pc.wrapping_add(1), 4)
+            }
+        }
+    };
+}
+
 pub struct Cpu {
     mmu: Mmu,
     pub reg: Register,
@@ -317,9 +347,7 @@ impl Cpu {
             // Op::AND(_, _) => {}
             // Op::OR(_, _) => {}
             // Op::XOR(src) => self.xor(src),
-            // Op::CP(src) => {
-            //     self.cp(src);
-            // }
+            Op::CP(target) => arithmetic!(target, self.cmp),
             // Op::RST(_) => {}
             // Op::RLC(_) => {}
             // Op::RRC(_) => {}
@@ -333,6 +361,16 @@ impl Cpu {
             // Op::SET(_, _) => {}
             instr => unimplemented!("instruction {:?} not implemented", instr),
         };
+    }
+
+    fn cmp(&mut self, value: u8) {
+        self.reg.set_flag(Flag::Zero, self.reg.a == value);
+        self.reg.set_flag(Flag::Negative, true);
+        // cmp is done by subtracting value from A and checking if it equals zero
+        // so if value is greater than A we will end up with something less than zero, thus
+        // carrying
+        self.reg.set_flag(Flag::HalfCarry, (self.reg.a & 0x0F) < (value & 0x0F));
+        self.reg.set_flag(Flag::Carry, self.reg.a < value);
     }
 
     // fn jr(&mut self, flag: Option<Condition>, offset: i8) -> u8 {
