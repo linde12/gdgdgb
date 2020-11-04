@@ -2,7 +2,7 @@ pub mod op;
 pub mod register;
 use crate::error::GBError;
 use crate::mmu::Mmu;
-use register::{Flag, Register};
+use register::{Flag, FlagsRegister, Register};
 use op::*;
 use std::fmt;
 
@@ -145,7 +145,10 @@ impl Cpu {
     pub fn execute_instruction(&mut self, instruction: Op) {
         // TODO: use _cycles
         let (next_pc, _cycles) = match instruction {
-            // Op::JR(flag, offset) => self.jr(flag, offset),
+            Op::JR(cond) => {
+                let flags: FlagsRegister = self.reg.f.into();
+                self.jr(cond.is_satisfied(flags))
+            },
             // Op::BIT(target, pos) => prefix!(target, self.bit_test, pos),
             Op::BIT(target, pos) => prefix!(target, self.bit_test, pos),
             Op::LD(load_type) => {
@@ -369,60 +372,18 @@ impl Cpu {
         self.reg.set_flag(Flag::HalfCarry, true);
     }
 
-    // fn jr(&mut self, flag: Option<Condition>, offset: i8) -> u8 {
-    //     let op_pc = self.reg.pc;
-    //     let addr = op_pc.wrapping_add(offset as usize);
-    //     if let Some(flag) = flag {
-    //         let cpu_flags: FlagsRegister = self.reg.f.into();
-    //         match flag {
-    //             Condition::NZ => {
-    //                 if !cpu_flags.z {
-    //                     self.reg.pc = addr;
-    //                 }
-    //             }
-    //             Condition::Z => {
-    //                 if cpu_flags.z {
-    //                     self.reg.pc = addr;
-    //                 }
-    //             }
-    //             Condition::NC => {
-    //                 if !cpu_flags.c {
-    //                     self.reg.pc = addr;
-    //                 }
-    //             }
-    //             Condition::C => {
-    //                 if cpu_flags.c {
-    //                     self.reg.pc = addr;
-    //                 }
-    //             }
-    //         };
-    //         12
-    //     } else {
-    //         self.reg.pc = addr;
-    //         8
-    //     }
-    // }
-
-    // fn bit(&mut self, n: u8, source: RegisterType) -> u8 {
-    //     let value = match source {
-    //         RegisterType::Register8(reg) => self.reg.reg8(reg),
-    //         // BIT n, (HL)
-    //         RegisterType::Register16(RegisterType16::HL) => {
-    //             let addr = self.reg.hl();
-    //             self.mmu.byte(addr as usize)
-    //         }
-    //         _ => panic!("invalid BIT target"),
-    //     };
-
-    //     let is_bit_zero = value & (1 << n) == 0;
-    //     if is_bit_zero {
-    //         self.reg.set_flag(Flag::Zero, true);
-    //     }
-    //     self.reg.set_flag(Flag::Negative, false);
-    //     self.reg.set_flag(Flag::HalfCarry, true);
-
-    //     8
-    // }
+    fn jr(&mut self, should_jump: bool) -> (u16, u8) {
+        let next_pc = self.pc.wrapping_add(2);
+        if should_jump {
+            let relative_offset = self.peek_byte() as i8;
+            // relative offset will be cast to u16, so e.g. -5 will become a large number and
+            // wrapping_add will make sure it wraps to zero and thus negative relative offsets will work
+            let next_pc = next_pc.wrapping_add(relative_offset as u16);
+            (next_pc, 16)
+        } else {
+            (next_pc, 12)
+        }
+    }
 
     // fn ld(&mut self, dst: Destination, src: Source) -> u8 {
     //     let src_value = self.value_from_source(src);
