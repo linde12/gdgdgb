@@ -69,6 +69,18 @@ pub enum ArithmeticTarget {
     HLIndirect,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum PrefixTarget {
+    A,
+    B,
+    C,
+    D,
+    E,
+    H,
+    L,
+    HLIndirect,
+}
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum IncDecTarget {
     A,
@@ -170,7 +182,7 @@ pub enum Op {
     // SRA(Destination),
     // SWAP(Destination),
     // SRL(Destination),
-    // BIT(u8, RegisterType),
+    BIT(PrefixTarget, u8),
     // RES(u8, RegisterType),
     // SET(u8, RegisterType),
 }
@@ -185,7 +197,81 @@ impl Op {
     }
 
     fn from_byte_prefix(byte: u8) -> Option<Op> {
-        None
+        match byte {
+            0x40 => Some(Op::BIT(PrefixTarget::B, 0)),
+            0x41 => Some(Op::BIT(PrefixTarget::C, 0)),
+            0x42 => Some(Op::BIT(PrefixTarget::D, 0)),
+            0x43 => Some(Op::BIT(PrefixTarget::E, 0)),
+            0x44 => Some(Op::BIT(PrefixTarget::H, 0)),
+            0x45 => Some(Op::BIT(PrefixTarget::L, 0)),
+            0x46 => Some(Op::BIT(PrefixTarget::HLIndirect, 0)),
+            0x47 => Some(Op::BIT(PrefixTarget::A, 0)),
+
+            0x48 => Some(Op::BIT(PrefixTarget::B, 1)),
+            0x49 => Some(Op::BIT(PrefixTarget::C, 1)),
+            0x4A => Some(Op::BIT(PrefixTarget::D, 1)),
+            0x4B => Some(Op::BIT(PrefixTarget::E, 1)),
+            0x4C => Some(Op::BIT(PrefixTarget::H, 1)),
+            0x4D => Some(Op::BIT(PrefixTarget::L, 1)),
+            0x4E => Some(Op::BIT(PrefixTarget::HLIndirect, 1)),
+            0x4F => Some(Op::BIT(PrefixTarget::A, 1)),
+
+            0x50 => Some(Op::BIT(PrefixTarget::B, 2)),
+            0x51 => Some(Op::BIT(PrefixTarget::C, 2)),
+            0x52 => Some(Op::BIT(PrefixTarget::D, 2)),
+            0x53 => Some(Op::BIT(PrefixTarget::E, 2)),
+            0x54 => Some(Op::BIT(PrefixTarget::H, 2)),
+            0x55 => Some(Op::BIT(PrefixTarget::L, 2)),
+            0x56 => Some(Op::BIT(PrefixTarget::HLIndirect, 2)),
+            0x57 => Some(Op::BIT(PrefixTarget::A, 2)),
+
+            0x58 => Some(Op::BIT(PrefixTarget::B, 3)),
+            0x59 => Some(Op::BIT(PrefixTarget::C, 3)),
+            0x5A => Some(Op::BIT(PrefixTarget::D, 3)),
+            0x5B => Some(Op::BIT(PrefixTarget::E, 3)),
+            0x5C => Some(Op::BIT(PrefixTarget::H, 3)),
+            0x5D => Some(Op::BIT(PrefixTarget::L, 3)),
+            0x5E => Some(Op::BIT(PrefixTarget::HLIndirect, 3)),
+            0x5F => Some(Op::BIT(PrefixTarget::A, 3)),
+
+            0x60 => Some(Op::BIT(PrefixTarget::B, 4)),
+            0x61 => Some(Op::BIT(PrefixTarget::C, 4)),
+            0x62 => Some(Op::BIT(PrefixTarget::D, 4)),
+            0x63 => Some(Op::BIT(PrefixTarget::E, 4)),
+            0x64 => Some(Op::BIT(PrefixTarget::H, 4)),
+            0x65 => Some(Op::BIT(PrefixTarget::L, 4)),
+            0x66 => Some(Op::BIT(PrefixTarget::HLIndirect, 4)),
+            0x67 => Some(Op::BIT(PrefixTarget::A, 4)),
+
+            0x68 => Some(Op::BIT(PrefixTarget::B, 5)),
+            0x69 => Some(Op::BIT(PrefixTarget::C, 5)),
+            0x6A => Some(Op::BIT(PrefixTarget::D, 5)),
+            0x6B => Some(Op::BIT(PrefixTarget::E, 5)),
+            0x6C => Some(Op::BIT(PrefixTarget::H, 5)),
+            0x6D => Some(Op::BIT(PrefixTarget::L, 5)),
+            0x6E => Some(Op::BIT(PrefixTarget::HLIndirect, 5)),
+            0x6F => Some(Op::BIT(PrefixTarget::A, 5)),
+
+            0x70 => Some(Op::BIT(PrefixTarget::B, 6)),
+            0x71 => Some(Op::BIT(PrefixTarget::C, 6)),
+            0x72 => Some(Op::BIT(PrefixTarget::D, 6)),
+            0x73 => Some(Op::BIT(PrefixTarget::E, 6)),
+            0x74 => Some(Op::BIT(PrefixTarget::H, 6)),
+            0x75 => Some(Op::BIT(PrefixTarget::L, 6)),
+            0x76 => Some(Op::BIT(PrefixTarget::HLIndirect, 6)),
+            0x77 => Some(Op::BIT(PrefixTarget::A, 6)),
+
+            0x78 => Some(Op::BIT(PrefixTarget::B, 7)),
+            0x79 => Some(Op::BIT(PrefixTarget::C, 7)),
+            0x7A => Some(Op::BIT(PrefixTarget::D, 7)),
+            0x7B => Some(Op::BIT(PrefixTarget::E, 7)),
+            0x7C => Some(Op::BIT(PrefixTarget::H, 7)),
+            0x7D => Some(Op::BIT(PrefixTarget::L, 7)),
+            0x7E => Some(Op::BIT(PrefixTarget::HLIndirect, 7)),
+            0x7F => Some(Op::BIT(PrefixTarget::A, 7)),
+
+            _ => None,
+        }
     }
 
     fn from_byte_no_prefix(byte: u8) -> Option<Op> {

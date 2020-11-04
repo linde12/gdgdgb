@@ -42,6 +42,65 @@ macro_rules! arithmetic {
     };
 }
 
+/// Performs prefix operations on the passed `PrefixTarget`. The second parameter specifies the
+/// operation to be performed.
+/// # Example:
+/// ```rust
+/// prefix!(target, self.bit_test, 0);
+/// ```
+macro_rules! prefix {
+    ($target:ident, $self:ident.$fn:ident) => {
+        {
+            match $target {
+                PrefixTarget::A => $self.$fn($self.reg.a),
+                PrefixTarget::B => $self.$fn($self.reg.b),
+                PrefixTarget::C => $self.$fn($self.reg.c),
+                PrefixTarget::D => $self.$fn($self.reg.d),
+                PrefixTarget::E => $self.$fn($self.reg.e),
+                PrefixTarget::H => $self.$fn($self.reg.h),
+                PrefixTarget::L => $self.$fn($self.reg.l),
+                PrefixTarget::HLIndirect => {
+                    let value = $self.mmu.byte($self.reg.hl());
+                    $self.$fn(value);
+                    $self.mmu.write_byte($self.reg.hl(), value);
+                }
+            };
+
+            let cycles = match $target {
+                PrefixTarget::HLIndirect => 16,
+                _ => 8
+            };
+            ($self.pc.wrapping_add(2), cycles)
+        }
+    };
+
+    ($target:ident, $self:ident.$fn:ident, $pos:ident) => {
+        {
+            match $target {
+                PrefixTarget::A => $self.$fn($self.reg.a, $pos),
+                PrefixTarget::B => $self.$fn($self.reg.b, $pos),
+                PrefixTarget::C => $self.$fn($self.reg.c, $pos),
+                PrefixTarget::D => $self.$fn($self.reg.d, $pos),
+                PrefixTarget::E => $self.$fn($self.reg.e, $pos),
+                PrefixTarget::H => $self.$fn($self.reg.h, $pos),
+                PrefixTarget::L => $self.$fn($self.reg.l, $pos),
+                PrefixTarget::HLIndirect => {
+                    let value = $self.mmu.byte($self.reg.hl());
+                    $self.$fn(value, $pos);
+                    $self.mmu.write_byte($self.reg.hl(), value);
+                }
+            };
+
+            let cycles = match $target {
+                PrefixTarget::HLIndirect => 16,
+                _ => 8
+            };
+
+            ($self.pc.wrapping_add(2), cycles)
+        }
+    };
+}
+
 pub struct Cpu {
     mmu: Mmu,
     pub reg: Register,
@@ -180,7 +239,8 @@ impl Cpu {
         // TODO: use _cycles
         let (next_pc, _cycles) = match instruction {
             // Op::JR(flag, offset) => self.jr(flag, offset),
-            // Op::BIT(n, src) => self.bit(n, src),
+            // Op::BIT(target, pos) => prefix!(target, self.bit_test, pos),
+            Op::BIT(target, pos) => prefix!(target, self.bit_test, pos),
             Op::LD(load_type) => {
                 match load_type {
                     LoadType::Byte(dst, src) => {
@@ -393,6 +453,13 @@ impl Cpu {
         self.reg.set_flag(Flag::Negative, false);
         self.reg.set_flag(Flag::HalfCarry, true);
         self.reg.set_flag(Flag::Carry, false);
+    }
+
+    fn bit_test(&mut self, value: u8, pos: u8) {
+        let result = (value >> pos) & 0b1;
+        self.reg.set_flag(Flag::Zero, result == 0);
+        self.reg.set_flag(Flag::Negative, false);
+        self.reg.set_flag(Flag::HalfCarry, true);
     }
 
     // fn jr(&mut self, flag: Option<Condition>, offset: i8) -> u8 {
