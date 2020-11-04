@@ -64,15 +64,16 @@ impl Cpu {
         self.mmu.word(self.pc + 1)
     }
 
-    pub fn read_instruction(&mut self) -> Option<Result<Op, GBError>> {
-        let byte = self.mmu.byte(self.pc);
+    pub fn read_instruction(&mut self) -> Result<Op, GBError> {
+        let mut byte = self.mmu.byte(self.pc);
         let is_prefix = byte == 0xCB;
         if is_prefix {
             self.cb = true;
-            None
+            byte = self.peek_byte();
+            Op::from_byte(byte, self.cb).ok_or_else(|| GBError::UnknownPrefixedOperation(byte))
         } else {
             self.cb = false;
-            Some(Op::from_byte(byte, self.cb).ok_or_else(|| GBError::UnknownOperation(byte)))
+            Op::from_byte(byte, self.cb).ok_or_else(|| GBError::UnknownOperation(byte))
         }
     }
 
