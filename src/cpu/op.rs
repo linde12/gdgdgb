@@ -173,17 +173,18 @@ pub enum Op {
     CP(ArithmeticTarget),
     RST(u8),
 
-    // RLC(Destination),
-    // RRC(Destination),
-    // RL(Destination),
-    // RR(Destination),
-    // SLA(Destination),
-    // SRA(Destination),
-    // SWAP(Destination),
-    // SRL(Destination),
+    // Prefixed ops
+    RLC(PrefixTarget),
+    RRC(PrefixTarget),
+    RL(PrefixTarget),
+    RR(PrefixTarget),
+    SLA(PrefixTarget),
+    SRA(PrefixTarget),
+    SWAP(PrefixTarget),
+    SRL(PrefixTarget),
     BIT(PrefixTarget, u8),
-    // RES(u8, RegisterType),
-    // SET(u8, RegisterType),
+    RES(PrefixTarget, u8),
+    SET(PrefixTarget, u8),
 }
 
 impl Op {
@@ -197,6 +198,78 @@ impl Op {
 
     fn from_byte_prefix(byte: u8) -> Option<Op> {
         match byte {
+            0x00 => Some(Op::RLC(PrefixTarget::B)),
+            0x01 => Some(Op::RLC(PrefixTarget::C)),
+            0x02 => Some(Op::RLC(PrefixTarget::D)),
+            0x03 => Some(Op::RLC(PrefixTarget::E)),
+            0x04 => Some(Op::RLC(PrefixTarget::H)),
+            0x05 => Some(Op::RLC(PrefixTarget::L)),
+            0x06 => Some(Op::RLC(PrefixTarget::HLIndirect)),
+            0x07 => Some(Op::RLC(PrefixTarget::A)),
+
+            0x08 => Some(Op::RRC(PrefixTarget::B)),
+            0x09 => Some(Op::RRC(PrefixTarget::C)),
+            0x0A => Some(Op::RRC(PrefixTarget::D)),
+            0x0B => Some(Op::RRC(PrefixTarget::E)),
+            0x0C => Some(Op::RRC(PrefixTarget::H)),
+            0x0D => Some(Op::RRC(PrefixTarget::L)),
+            0x0E => Some(Op::RRC(PrefixTarget::HLIndirect)),
+            0x0F => Some(Op::RRC(PrefixTarget::A)),
+
+            0x10 => Some(Op::RL(PrefixTarget::B)),
+            0x11 => Some(Op::RL(PrefixTarget::C)),
+            0x12 => Some(Op::RL(PrefixTarget::D)),
+            0x13 => Some(Op::RL(PrefixTarget::E)),
+            0x14 => Some(Op::RL(PrefixTarget::H)),
+            0x15 => Some(Op::RL(PrefixTarget::L)),
+            0x16 => Some(Op::RL(PrefixTarget::HLIndirect)),
+            0x17 => Some(Op::RL(PrefixTarget::A)),
+
+            0x18 => Some(Op::RR(PrefixTarget::B)),
+            0x19 => Some(Op::RR(PrefixTarget::C)),
+            0x1A => Some(Op::RR(PrefixTarget::D)),
+            0x1B => Some(Op::RR(PrefixTarget::E)),
+            0x1C => Some(Op::RR(PrefixTarget::H)),
+            0x1D => Some(Op::RR(PrefixTarget::L)),
+            0x1E => Some(Op::RR(PrefixTarget::HLIndirect)),
+            0x1F => Some(Op::RR(PrefixTarget::A)),
+
+            0x20 => Some(Op::SLA(PrefixTarget::B)),
+            0x21 => Some(Op::SLA(PrefixTarget::C)),
+            0x22 => Some(Op::SLA(PrefixTarget::D)),
+            0x23 => Some(Op::SLA(PrefixTarget::E)),
+            0x24 => Some(Op::SLA(PrefixTarget::H)),
+            0x25 => Some(Op::SLA(PrefixTarget::L)),
+            0x26 => Some(Op::SLA(PrefixTarget::HLIndirect)),
+            0x27 => Some(Op::SLA(PrefixTarget::A)),
+
+            0x28 => Some(Op::SRA(PrefixTarget::B)),
+            0x29 => Some(Op::SRA(PrefixTarget::C)),
+            0x2A => Some(Op::SRA(PrefixTarget::D)),
+            0x2B => Some(Op::SRA(PrefixTarget::E)),
+            0x2C => Some(Op::SRA(PrefixTarget::H)),
+            0x2D => Some(Op::SRA(PrefixTarget::L)),
+            0x2E => Some(Op::SRA(PrefixTarget::HLIndirect)),
+            0x2F => Some(Op::SRA(PrefixTarget::A)),
+
+            0x30 => Some(Op::SWAP(PrefixTarget::B)),
+            0x31 => Some(Op::SWAP(PrefixTarget::C)),
+            0x32 => Some(Op::SWAP(PrefixTarget::D)),
+            0x33 => Some(Op::SWAP(PrefixTarget::E)),
+            0x34 => Some(Op::SWAP(PrefixTarget::H)),
+            0x35 => Some(Op::SWAP(PrefixTarget::L)),
+            0x36 => Some(Op::SWAP(PrefixTarget::HLIndirect)),
+            0x37 => Some(Op::SWAP(PrefixTarget::A)),
+
+            0x38 => Some(Op::SRL(PrefixTarget::B)),
+            0x39 => Some(Op::SRL(PrefixTarget::C)),
+            0x3A => Some(Op::SRL(PrefixTarget::D)),
+            0x3B => Some(Op::SRL(PrefixTarget::E)),
+            0x3C => Some(Op::SRL(PrefixTarget::H)),
+            0x3D => Some(Op::SRL(PrefixTarget::L)),
+            0x3E => Some(Op::SRL(PrefixTarget::HLIndirect)),
+            0x3F => Some(Op::SRL(PrefixTarget::A)),
+
             0x40 => Some(Op::BIT(PrefixTarget::B, 0)),
             0x41 => Some(Op::BIT(PrefixTarget::C, 0)),
             0x42 => Some(Op::BIT(PrefixTarget::D, 0)),
@@ -269,6 +342,105 @@ impl Op {
             0x7E => Some(Op::BIT(PrefixTarget::HLIndirect, 7)),
             0x7F => Some(Op::BIT(PrefixTarget::A, 7)),
 
+            0xA8 => Some(Op::RES(PrefixTarget::B, 5)),
+            0xA9 => Some(Op::RES(PrefixTarget::C, 5)),
+            0xAA => Some(Op::RES(PrefixTarget::D, 5)),
+            0xAB => Some(Op::RES(PrefixTarget::E, 5)),
+            0xAC => Some(Op::RES(PrefixTarget::H, 5)),
+            0xAD => Some(Op::RES(PrefixTarget::L, 5)),
+            0xAE => Some(Op::RES(PrefixTarget::HLIndirect, 5)),
+            0xAF => Some(Op::RES(PrefixTarget::A, 5)),
+
+            0xB0 => Some(Op::RES(PrefixTarget::B, 6)),
+            0xB1 => Some(Op::RES(PrefixTarget::C, 6)),
+            0xB2 => Some(Op::RES(PrefixTarget::D, 6)),
+            0xB3 => Some(Op::RES(PrefixTarget::E, 6)),
+            0xB4 => Some(Op::RES(PrefixTarget::H, 6)),
+            0xB5 => Some(Op::RES(PrefixTarget::L, 6)),
+            0xB6 => Some(Op::RES(PrefixTarget::HLIndirect, 6)),
+            0xB7 => Some(Op::RES(PrefixTarget::A, 6)),
+
+            0xB8 => Some(Op::RES(PrefixTarget::B, 7)),
+            0xB9 => Some(Op::RES(PrefixTarget::C, 7)),
+            0xBA => Some(Op::RES(PrefixTarget::D, 7)),
+            0xBB => Some(Op::RES(PrefixTarget::E, 7)),
+            0xBC => Some(Op::RES(PrefixTarget::H, 7)),
+            0xBD => Some(Op::RES(PrefixTarget::L, 7)),
+            0xBE => Some(Op::RES(PrefixTarget::HLIndirect, 7)),
+            0xBF => Some(Op::RES(PrefixTarget::A, 7)),
+
+            0xC0 => Some(Op::SET(PrefixTarget::B, 0)),
+            0xC1 => Some(Op::SET(PrefixTarget::C, 0)),
+            0xC2 => Some(Op::SET(PrefixTarget::D, 0)),
+            0xC3 => Some(Op::SET(PrefixTarget::E, 0)),
+            0xC4 => Some(Op::SET(PrefixTarget::H, 0)),
+            0xC5 => Some(Op::SET(PrefixTarget::L, 0)),
+            0xC6 => Some(Op::SET(PrefixTarget::HLIndirect, 0)),
+            0xC7 => Some(Op::SET(PrefixTarget::A, 0)),
+
+            0xC8 => Some(Op::SET(PrefixTarget::B, 1)),
+            0xC9 => Some(Op::SET(PrefixTarget::C, 1)),
+            0xCA => Some(Op::SET(PrefixTarget::D, 1)),
+            0xCB => Some(Op::SET(PrefixTarget::E, 1)),
+            0xCC => Some(Op::SET(PrefixTarget::H, 1)),
+            0xCD => Some(Op::SET(PrefixTarget::L, 1)),
+            0xCE => Some(Op::SET(PrefixTarget::HLIndirect, 1)),
+            0xCF => Some(Op::SET(PrefixTarget::A, 1)),
+
+            0xD0 => Some(Op::SET(PrefixTarget::B, 2)),
+            0xD1 => Some(Op::SET(PrefixTarget::C, 2)),
+            0xD2 => Some(Op::SET(PrefixTarget::D, 2)),
+            0xD3 => Some(Op::SET(PrefixTarget::E, 2)),
+            0xD4 => Some(Op::SET(PrefixTarget::H, 2)),
+            0xD5 => Some(Op::SET(PrefixTarget::L, 2)),
+            0xD6 => Some(Op::SET(PrefixTarget::HLIndirect, 2)),
+            0xD7 => Some(Op::SET(PrefixTarget::A, 2)),
+
+            0xD8 => Some(Op::SET(PrefixTarget::B, 3)),
+            0xD9 => Some(Op::SET(PrefixTarget::C, 3)),
+            0xDA => Some(Op::SET(PrefixTarget::D, 3)),
+            0xDB => Some(Op::SET(PrefixTarget::E, 3)),
+            0xDC => Some(Op::SET(PrefixTarget::H, 3)),
+            0xDD => Some(Op::SET(PrefixTarget::L, 3)),
+            0xDE => Some(Op::SET(PrefixTarget::HLIndirect, 3)),
+            0xDF => Some(Op::SET(PrefixTarget::A, 3)),
+
+            0xE0 => Some(Op::SET(PrefixTarget::B, 4)),
+            0xE1 => Some(Op::SET(PrefixTarget::C, 4)),
+            0xE2 => Some(Op::SET(PrefixTarget::D, 4)),
+            0xE3 => Some(Op::SET(PrefixTarget::E, 4)),
+            0xE4 => Some(Op::SET(PrefixTarget::H, 4)),
+            0xE5 => Some(Op::SET(PrefixTarget::L, 4)),
+            0xE6 => Some(Op::SET(PrefixTarget::HLIndirect, 4)),
+            0xE7 => Some(Op::SET(PrefixTarget::A, 4)),
+
+            0xE8 => Some(Op::SET(PrefixTarget::B, 5)),
+            0xE9 => Some(Op::SET(PrefixTarget::C, 5)),
+            0xEA => Some(Op::SET(PrefixTarget::D, 5)),
+            0xEB => Some(Op::SET(PrefixTarget::E, 5)),
+            0xEC => Some(Op::SET(PrefixTarget::H, 5)),
+            0xED => Some(Op::SET(PrefixTarget::L, 5)),
+            0xEE => Some(Op::SET(PrefixTarget::HLIndirect, 5)),
+            0xEF => Some(Op::SET(PrefixTarget::A, 5)),
+
+            0xF0 => Some(Op::SET(PrefixTarget::B, 6)),
+            0xF1 => Some(Op::SET(PrefixTarget::C, 6)),
+            0xF2 => Some(Op::SET(PrefixTarget::D, 6)),
+            0xF3 => Some(Op::SET(PrefixTarget::E, 6)),
+            0xF4 => Some(Op::SET(PrefixTarget::H, 6)),
+            0xF5 => Some(Op::SET(PrefixTarget::L, 6)),
+            0xF6 => Some(Op::SET(PrefixTarget::HLIndirect, 6)),
+            0xF7 => Some(Op::SET(PrefixTarget::A, 6)),
+
+            0xF8 => Some(Op::SET(PrefixTarget::B, 7)),
+            0xF9 => Some(Op::SET(PrefixTarget::C, 7)),
+            0xFA => Some(Op::SET(PrefixTarget::D, 7)),
+            0xFB => Some(Op::SET(PrefixTarget::E, 7)),
+            0xFC => Some(Op::SET(PrefixTarget::H, 7)),
+            0xFD => Some(Op::SET(PrefixTarget::L, 7)),
+            0xFE => Some(Op::SET(PrefixTarget::HLIndirect, 7)),
+            0xFF => Some(Op::SET(PrefixTarget::A, 7)),
+
             _ => None,
         }
     }
@@ -290,39 +462,33 @@ impl Op {
             0x27 => Some(Op::DAA),
             0x37 => Some(Op::SCF),
 
-            // POP
             0xC1 => Some(Op::POP(StackTarget::BC)),
             0xD1 => Some(Op::POP(StackTarget::DE)),
             0xE1 => Some(Op::POP(StackTarget::HL)),
             0xF1 => Some(Op::POP(StackTarget::AF)),
 
-            // PUSH
             0xC5 => Some(Op::PUSH(StackTarget::BC)),
             0xD5 => Some(Op::PUSH(StackTarget::DE)),
             0xE5 => Some(Op::PUSH(StackTarget::HL)),
             0xF5 => Some(Op::PUSH(StackTarget::AF)),
 
-            // RET
             0xC0 => Some(Op::RET(Condition::NZ)),
             0xD0 => Some(Op::RET(Condition::NC)),
             0xC8 => Some(Op::RET(Condition::Z)),
             0xD8 => Some(Op::RET(Condition::C)),
             0xC9 => Some(Op::RET(Condition::None)),
+
             0xD9 => Some(Op::RETI),
 
-            // RST 00h..30h
             0xC7 => Some(Op::RST(0x00)),
             0xD7 => Some(Op::RST(0x10)),
             0xE7 => Some(Op::RST(0x20)),
             0xF7 => Some(Op::RST(0x30)),
-
-            // RST 08h..38h
             0xCF => Some(Op::RST(0x08)),
             0xDF => Some(Op::RST(0x18)),
             0xEF => Some(Op::RST(0x28)),
             0xFF => Some(Op::RST(0x38)),
 
-            // LD
             0x01 => Some(Op::LD(LoadType::Word(LoadWordTarget::BC))),
             0x11 => Some(Op::LD(LoadType::Word(LoadWordTarget::DE))),
             0x21 => Some(Op::LD(LoadType::Word(LoadWordTarget::HL))),
@@ -666,7 +832,6 @@ impl Op {
             0xF9 => Some(Op::LD(LoadType::SPFromHL)),
             0xF8 => Some(Op::LD(LoadType::HLFromSPu8)),
 
-            // ADD A
             0x87 => Some(Op::ADD(ArithmeticTarget::A)),
             0x80 => Some(Op::ADD(ArithmeticTarget::B)),
             0x81 => Some(Op::ADD(ArithmeticTarget::C)),
@@ -677,7 +842,6 @@ impl Op {
             0x86 => Some(Op::ADD(ArithmeticTarget::HLIndirect)),
             0xC6 => Some(Op::ADD(ArithmeticTarget::D8)),
 
-            // ADC A
             0x8F => Some(Op::ADC(ArithmeticTarget::A)),
             0x88 => Some(Op::ADC(ArithmeticTarget::B)),
             0x89 => Some(Op::ADC(ArithmeticTarget::C)),
@@ -688,7 +852,6 @@ impl Op {
             0x8E => Some(Op::ADC(ArithmeticTarget::HLIndirect)),
             0xCE => Some(Op::ADC(ArithmeticTarget::D8)),
 
-            // SUB A
             0x97 => Some(Op::SUB(ArithmeticTarget::A)),
             0x90 => Some(Op::SUB(ArithmeticTarget::B)),
             0x91 => Some(Op::SUB(ArithmeticTarget::C)),
@@ -699,7 +862,6 @@ impl Op {
             0x96 => Some(Op::SUB(ArithmeticTarget::HLIndirect)),
             0xD6 => Some(Op::SUB(ArithmeticTarget::D8)),
 
-            // SBC A
             0x9F => Some(Op::SBC(ArithmeticTarget::A)),
             0x98 => Some(Op::SBC(ArithmeticTarget::B)),
             0x99 => Some(Op::SBC(ArithmeticTarget::C)),
@@ -710,7 +872,6 @@ impl Op {
             0x9E => Some(Op::SBC(ArithmeticTarget::HLIndirect)),
             0xDE => Some(Op::SBC(ArithmeticTarget::D8)),
 
-            // AND A
             0xA7 => Some(Op::AND(ArithmeticTarget::A)),
             0xA0 => Some(Op::AND(ArithmeticTarget::B)),
             0xA1 => Some(Op::AND(ArithmeticTarget::C)),
@@ -721,7 +882,6 @@ impl Op {
             0xA6 => Some(Op::AND(ArithmeticTarget::HLIndirect)),
             0xE6 => Some(Op::AND(ArithmeticTarget::D8)),
 
-            // XOR A
             0xAF => Some(Op::XOR(ArithmeticTarget::A)),
             0xA8 => Some(Op::XOR(ArithmeticTarget::B)),
             0xA9 => Some(Op::XOR(ArithmeticTarget::C)),
@@ -732,7 +892,6 @@ impl Op {
             0xAE => Some(Op::XOR(ArithmeticTarget::HLIndirect)),
             0xEE => Some(Op::XOR(ArithmeticTarget::D8)),
 
-            // OR A
             0xB7 => Some(Op::OR(ArithmeticTarget::A)),
             0xB0 => Some(Op::OR(ArithmeticTarget::B)),
             0xB1 => Some(Op::OR(ArithmeticTarget::C)),
@@ -743,7 +902,6 @@ impl Op {
             0xB6 => Some(Op::OR(ArithmeticTarget::HLIndirect)),
             0xF6 => Some(Op::OR(ArithmeticTarget::D8)),
 
-            // CP A
             0xBF => Some(Op::CP(ArithmeticTarget::A)),
             0xB8 => Some(Op::CP(ArithmeticTarget::B)),
             0xB9 => Some(Op::CP(ArithmeticTarget::C)),
@@ -754,13 +912,11 @@ impl Op {
             0xBE => Some(Op::CP(ArithmeticTarget::HLIndirect)),
             0xFE => Some(Op::CP(ArithmeticTarget::D8)),
 
-            // ADD HL
             0x09 => Some(Op::ADDHL(ADDHLTarget::BC)),
             0x19 => Some(Op::ADDHL(ADDHLTarget::DE)),
             0x29 => Some(Op::ADDHL(ADDHLTarget::HL)),
             0x39 => Some(Op::ADDHL(ADDHLTarget::SP)),
 
-            // INC
             0x3C => Some(Op::INC(IncDecTarget::A)),
             0x04 => Some(Op::INC(IncDecTarget::B)),
             0x14 => Some(Op::INC(IncDecTarget::D)),
@@ -774,7 +930,6 @@ impl Op {
             0x23 => Some(Op::INC(IncDecTarget::HL)),
             0x33 => Some(Op::INC(IncDecTarget::SP)),
 
-            // DEC
             0x3D => Some(Op::DEC(IncDecTarget::A)),
             0x05 => Some(Op::DEC(IncDecTarget::B)),
             0x0D => Some(Op::DEC(IncDecTarget::C)),
@@ -789,7 +944,6 @@ impl Op {
             0x3B => Some(Op::DEC(IncDecTarget::SP)),
 
 
-            // JP
             0xC3 => Some(Op::JP(Condition::None)),
             0xC2 => Some(Op::JP(Condition::NZ)),
             0xD2 => Some(Op::JP(Condition::NC)),
@@ -797,7 +951,6 @@ impl Op {
             0xDA => Some(Op::JP(Condition::C)),
             0xE9 => Some(Op::JPIndirect),
 
-            // JR
             0x18 => Some(Op::JR(Condition::None)),
             0x20 => Some(Op::JR(Condition::NZ)),
             0x30 => Some(Op::JR(Condition::NC)),
@@ -805,7 +958,6 @@ impl Op {
             0x38 => Some(Op::JR(Condition::C)),
 
 
-            // CALL
             0xCD => Some(Op::CALL(Condition::None)),
             0xC4 => Some(Op::CALL(Condition::NZ)),
             0xD4 => Some(Op::CALL(Condition::NC)),
