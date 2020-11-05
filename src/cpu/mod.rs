@@ -316,11 +316,6 @@ impl Cpu {
             // Op::LDI(dst, src) => self.ldi(dst, src),
             // // Op::NOP => {}
             // // Op::STOP => {}
-            // Op::RLA => {
-            //     let ticks = self.rl(Destination::Direct(Target::Register8(RegisterType8::A)));
-            //     self.reg.set_flag(Flag::Zero, false);
-            //     ticks
-            // }
             // Op::RRA => {}
             // Op::RLCA => {}
             // Op::RRCA => {}
@@ -407,6 +402,14 @@ impl Cpu {
             // Op::RRC(_) => {}
             Op::RL(target) => prefix!(target, self.rot_left_through_carry_zero_flag),
             Op::RR(target) => prefix!(target, self.rot_right_through_carry_zero_flag),
+            Op::RLA => {
+                self.reg.a = self.rot_left_through_carry_no_zero_flag(self.reg.a);
+                (self.pc.wrapping_add(1), 4)
+            }
+            Op::RRA => {
+                self.reg.a = self.rot_right_through_carry_no_zero_flag(self.reg.a);
+                (self.pc.wrapping_add(1), 4)
+            }
             // Op::SLA(_) => {}
             // Op::SRA(_) => {}
             // Op::SWAP(_) => {}
@@ -518,6 +521,10 @@ impl Cpu {
         self.rot_left_through_carry(value, true)
     }
 
+    fn rot_left_through_carry_no_zero_flag(&mut self, value: u8) -> u8 {
+        self.rot_left_through_carry(value, true)
+    }
+
     // TODO: test
     fn rot_left_through_carry(&mut self, value: u8, set_zero: bool) -> u8 {
         let flags: FlagsRegister = self.reg.f.into();
@@ -535,6 +542,10 @@ impl Cpu {
 
     fn rot_right_through_carry_zero_flag(&mut self, value: u8) -> u8 {
         self.rot_right_through_carry(value, true)
+    }
+
+    fn rot_right_through_carry_no_zero_flag(&mut self, value: u8) -> u8 {
+        self.rot_right_through_carry(value, false)
     }
 
     // TODO: test
