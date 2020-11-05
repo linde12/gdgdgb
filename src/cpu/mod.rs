@@ -298,9 +298,22 @@ impl Cpu {
             // Op::EI => {}
             // Op::RETI => {}
             // Op::PREFIX => 0,
-            // Op::PUSH(reg) => self.push(reg),
+            Op::PUSH(target) => {
+                let value = match target {
+                    StackTarget::AF => self.reg.af(),
+                    StackTarget::BC => self.reg.bc(),
+                    StackTarget::DE => self.reg.de(),
+                    StackTarget::HL => self.reg.hl(),
+                };
+                self.push(value);
+
+                (self.pc.wrapping_add(1), 16)
+            },
             // Op::POP(reg) => self.pop(reg),
-            // Op::CALL(condition, addr) => self.call(condition, addr),
+            Op::CALL(condition) => {
+                let flags: FlagsRegister = self.reg.f.into();
+                self.call(condition.is_satisfied(flags))
+            },
             // Op::RET(cond) => self.ret(cond),
             Op::INC(target) => {
                 match target {
@@ -439,6 +452,21 @@ impl Cpu {
         self.reg.set_flag(Flag::Negative, false);
         self.reg.set_flag(Flag::HalfCarry, (value & 0x0F) + 1 > 0x0F);
         result
+    }
+
+    fn call(&mut self, should_jump: bool) -> (u16, u8) {
+        let next_pc = self.pc.wrapping_add(3);
+        if should_jump {
+            self.push(next_pc);
+            (self.peek_word(), 24)
+        } else {
+            (next_pc, 12)
+        }
+    }
+
+    fn push(&mut self, value: u16) {
+        self.sp = self.sp.wrapping_sub(2);
+        self.mmu.write_word(self.sp, value);
     }
 
     // fn ld(&mut self, dst: Destination, src: Source) -> u8 {
