@@ -1,5 +1,3 @@
-use crate::error::GBError;
-
 static BOOT_ROM: &[u8; 256] = include_bytes!("../DMG_ROM.bin");
 
 // See https://gbdev.gg8.se/wiki/articles/Memory_Map
@@ -28,7 +26,9 @@ impl Mmu {
         }
     }
 
-    pub fn byte(&self, index: usize) -> u8 {
+    pub fn byte(&self, index: u16) -> u8 {
+        let index = index as usize;
+
         match index {
             0x0000 ..= 0x00FF => if self.dmg_rom_enabled() { BOOT_ROM[index] } else { self.rom[index] }
             0x0100 ..= 0x7FFF => self.rom[index],
@@ -46,12 +46,13 @@ impl Mmu {
     fn dmg_rom_enabled(&self) -> bool {
         self.byte(0xFF50) != 1
     }
-    pub fn word(&self, index: usize) -> u16 {
+    pub fn word(&self, index: u16) -> u16 {
         // little-endian, least significant bit comes first, hence | and << 8
         (self.byte(index) as u16) | ((self.byte(index + 1) as u16) << 8)
     }
 
-    pub fn write_byte(&mut self, index: usize, b: u8) {
+    pub fn write_byte(&mut self, index: u16, b: u8) {
+        let index = index as usize;
         match index {
             0x0000 ..= 0x7FFF => self.rom[index] = b,
             0x8000 ..= 0x9FFF => self.vram[index - 0x8000] = b,
@@ -65,7 +66,7 @@ impl Mmu {
         }
     }
 
-    pub fn write_word(&mut self, index: usize, w: u16) {
+    pub fn write_word(&mut self, index: u16, w: u16) {
         let [high, low] = w.to_be_bytes();
         self.write_byte(index, low);
         self.write_byte(index + 1, high);

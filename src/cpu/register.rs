@@ -1,24 +1,3 @@
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum RegisterType8 {
-    A,
-    B,
-    C,
-    D,
-    E,
-    F, // Holds CPU Flags
-    H,
-    L,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum RegisterType16 {
-    AF,
-    BC,
-    DE,
-    HL,
-    SP,
-}
-
 #[derive(Debug, Copy, Clone)]
 pub enum Flag {
     Zero,
@@ -46,16 +25,20 @@ impl From<u8> for FlagsRegister {
     }
 }
 
-macro_rules! reg_16 {
+macro_rules! reg {
     ($name: ident, $reg1: ident, $reg2: ident) => {
         pub fn $name(&self) -> u16 {
             ((self.$reg1 as u16) << 8) | (self.$reg2 as u16)
         }
     };
+}
 
-    ($name: ident) => {
-        pub fn $name(&self) -> u16 {
-            self.$name
+macro_rules! set_reg {
+    ($name: ident, $reg1: ident, $reg2: ident) => {
+        pub fn $name(&mut self, value: u16) {
+            let [hi, lo] = value.to_be_bytes();
+            self.$reg1 = hi;
+            self.$reg2 = lo;
         }
     };
 }
@@ -70,8 +53,6 @@ pub struct Register {
     pub f: u8,
     pub h: u8,
     pub l: u8,
-    pub pc: usize,
-    pub sp: usize,
 }
 
 impl Register {
@@ -82,81 +63,14 @@ impl Register {
         }
     }
 
-    reg_16!(af, a, f);
-    reg_16!(bc, b, c);
-    reg_16!(de, d, e);
-    reg_16!(hl, h, l);
-
-    pub fn set_reg16(&mut self, reg: RegisterType16, value: u16) {
-        match reg {
-            RegisterType16::AF => {
-                let [a, f] = value.to_be_bytes();
-                self.a = a;
-                self.f = a;
-            }
-            RegisterType16::BC => {
-                let [b, c] = value.to_be_bytes();
-                self.b = b;
-                self.c = c;
-            }
-            RegisterType16::DE => {
-                let [d, e] = value.to_be_bytes();
-                self.d = d;
-                self.e = e;
-            }
-            RegisterType16::HL => {
-                let [h, l] = value.to_be_bytes();
-                self.h = h;
-                self.l = l;
-            }
-            RegisterType16::SP => self.sp = value as usize,
-        }
-    }
-
-    pub fn reg16(&self, reg: RegisterType16) -> u16 {
-        match reg {
-            // TODO: Correct endianess?
-            RegisterType16::AF => ((self.a as u16) << 8) | (self.f as u16) as u16,
-            RegisterType16::BC => ((self.b as u16) << 8) | (self.c as u16) as u16,
-            RegisterType16::DE => ((self.d as u16) << 8) | (self.e as u16) as u16,
-            RegisterType16::HL => self.hl(),
-            RegisterType16::SP => self.sp as u16,
-        }
-    }
-
-    pub fn dec_hl(&mut self) {
-        self.set_reg16(RegisterType16::HL, self.hl().wrapping_sub(1));
-    }
-
-    pub fn inc_hl(&mut self) {
-        self.set_reg16(RegisterType16::HL, self.hl().wrapping_add(1));
-    }
-
-    pub fn set_reg8(&mut self, reg: RegisterType8, value: u8) {
-        match reg {
-            RegisterType8::A => self.a = value,
-            RegisterType8::B => self.b = value,
-            RegisterType8::C => self.c = value,
-            RegisterType8::D => self.d = value,
-            RegisterType8::E => self.e = value,
-            RegisterType8::F => self.f = value,
-            RegisterType8::H => self.h = value,
-            RegisterType8::L => self.l = value,
-        }
-    }
-
-    pub fn reg8(&self, reg: RegisterType8) -> u8 {
-        match reg {
-            RegisterType8::A => self.a,
-            RegisterType8::B => self.b,
-            RegisterType8::C => self.c,
-            RegisterType8::D => self.d,
-            RegisterType8::E => self.e,
-            RegisterType8::F => self.f,
-            RegisterType8::H => self.h,
-            RegisterType8::L => self.l,
-        }
-    }
+    reg!(af, a, f);
+    reg!(bc, b, c);
+    reg!(de, d, e);
+    reg!(hl, h, l);
+    set_reg!(set_af, a, f);
+    set_reg!(set_bc, b, c);
+    set_reg!(set_de, d, e);
+    set_reg!(set_hl, h, l);
 
     pub fn set_flag(&mut self, flag: Flag, value: bool) {
         if value == true {
@@ -192,7 +106,7 @@ mod tests {
 
     #[test]
     fn set_flag() {
-        let mut regs = Register::new();
+        let regs = Register::new();
         assert!(regs.f == 0);
 
         let mut regs = Register::new();
