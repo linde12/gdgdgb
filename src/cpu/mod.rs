@@ -339,7 +339,17 @@ impl Cpu {
 
                 (self.pc.wrapping_add(1), 16)
             },
-            // Op::POP(reg) => self.pop(reg),
+            Op::POP(target) => {
+                let value = self.pop();
+                match target {
+                    StackTarget::AF => self.reg.set_af(value),
+                    StackTarget::BC => self.reg.set_bc(value),
+                    StackTarget::DE => self.reg.set_de(value),
+                    StackTarget::HL => self.reg.set_hl(value),
+                };
+
+                (self.pc.wrapping_add(1), 12)
+            }
             Op::CALL(condition) => {
                 let flags: FlagsRegister = self.reg.f.into();
                 self.call(condition.is_satisfied(flags))
@@ -517,6 +527,13 @@ impl Cpu {
         self.mmu.write_word(self.sp, value);
     }
 
+    // TODO: test
+    fn pop(&mut self, ) -> u16 {
+        let value = self.mmu.word(self.sp);
+        self.sp += 2;
+        value
+    }
+
     fn rot_left_through_carry_zero_flag(&mut self, value: u8) -> u8 {
         self.rot_left_through_carry(value, true)
     }
@@ -585,13 +602,6 @@ impl Cpu {
     //     8
     // }
 
-    // fn pop(&mut self, reg: RegisterType16) -> u8 {
-    //     let value = self.mmu.word(self.reg.sp);
-    //     self.reg.sp += 2;
-    //     self.reg.set_reg16(reg, value);
-
-    //     8
-    // }
 
     // fn ret(&mut self, cond: Option<Condition>) -> u8 {
     //     let cpu_flags: FlagsRegister = self.reg.f.into();
