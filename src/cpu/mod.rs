@@ -405,10 +405,8 @@ impl Cpu {
             // Op::RST(_) => {}
             // Op::RLC(_) => {}
             // Op::RRC(_) => {}
-            Op::RL(target) => {
-                prefix!(target, self.rot_left_through_carry_zero_flag)
-            },
-            // Op::RR(_) => {}
+            Op::RL(target) => prefix!(target, self.rot_left_through_carry_zero_flag),
+            Op::RR(target) => prefix!(target, self.rot_right_through_carry_zero_flag),
             // Op::SLA(_) => {}
             // Op::SRA(_) => {}
             // Op::SWAP(_) => {}
@@ -532,6 +530,25 @@ impl Cpu {
         self.reg.set_flag(Flag::HalfCarry, false);
         // shift MSB into carry flag
         self.reg.set_flag(Flag::Carry, value & 0x80 == 0x80);
+        next_value
+    }
+
+    fn rot_right_through_carry_zero_flag(&mut self, value: u8) -> u8 {
+        self.rot_right_through_carry(value, true)
+    }
+
+    // TODO: test
+    fn rot_right_through_carry(&mut self, value: u8, set_zero: bool) -> u8 {
+        let flags: FlagsRegister = self.reg.f.into();
+        let carry_bit = if flags.c { 1 } else { 0 } << 7;
+        // shift everything one step to the right, and set whatever carry was set to to the
+        // most significant bit
+        let next_value = carry_bit | (value >> 1);
+        self.reg.set_flag(Flag::Zero, set_zero && next_value == 0);
+        self.reg.set_flag(Flag::Negative, false);
+        self.reg.set_flag(Flag::HalfCarry, false);
+        // shift LSB into carry flag
+        self.reg.set_flag(Flag::Carry, value & 0b1 == 0b1);
         next_value
     }
     // fn ld(&mut self, dst: Destination, src: Source) -> u8 {
