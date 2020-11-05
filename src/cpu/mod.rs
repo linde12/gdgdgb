@@ -354,7 +354,21 @@ impl Cpu {
                 let flags: FlagsRegister = self.reg.f.into();
                 self.call(condition.is_satisfied(flags))
             },
-            // Op::RET(cond) => self.ret(cond),
+            Op::RET(cond) => {
+                let flags: FlagsRegister = self.reg.f.into();
+                let should_jump = cond.is_satisfied(flags);
+                let next_pc = self.ret(should_jump);
+
+                let cycles = if should_jump && cond == Condition::None {
+                    16 // jump
+                } else if should_jump {
+                    20 // jump and read condition
+                } else {
+                    8  // no jump
+                };
+
+                (next_pc, cycles)
+            },
             Op::INC(target) => {
                 match target {
                     IncDecTarget::A => self.reg.a = self.inc_8bit(self.reg.a),
@@ -654,21 +668,13 @@ impl Cpu {
     // }
 
 
-    // fn ret(&mut self, cond: Option<Condition>) -> u8 {
-    //     let cpu_flags: FlagsRegister = self.reg.f.into();
-    //     let ok = match cond {
-    //         Some(cond) => cond.is_satisfied(cpu_flags),
-    //         None => true,
-    //     };
-
-    //     if ok {
-    //         let value = self.mmu.word(self.reg.sp) as usize;
-    //         self.reg.sp += 2;
-    //         self.reg.pc = value;
-    //     }
-
-    //     8
-    // }
+    fn ret(&mut self, should_jump: bool) -> u16 {
+        if should_jump {
+            self.pop() // pop return address
+        } else {
+            self.pc.wrapping_add(1) // otherwise continue executing next addr
+        }
+    }
 }
 
 impl fmt::Display for Cpu {
