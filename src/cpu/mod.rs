@@ -43,22 +43,57 @@ macro_rules! arithmetic {
 }
 
 /// Performs prefix operations on the passed `PrefixTarget`. The second parameter specifies the
-/// operation to be performed.
+/// operation to be performed and the third specifies the bit position.
 /// # Example:
 /// ```rust
-/// prefix!(target, self.bit_test, 0);
+/// prefix_test!(target, self.bit_test, 0);
+/// ```
+macro_rules! prefix_test {
+    ($target:ident, $self:ident.$fn:ident, $pos:ident) => {
+        {
+            match $target {
+                PrefixTarget::A => $self.$fn($self.reg.a, $pos),
+                PrefixTarget::B => $self.$fn($self.reg.b, $pos),
+                PrefixTarget::C => $self.$fn($self.reg.c, $pos),
+                PrefixTarget::D => $self.$fn($self.reg.d, $pos),
+                PrefixTarget::E => $self.$fn($self.reg.e, $pos),
+                PrefixTarget::H => $self.$fn($self.reg.h, $pos),
+                PrefixTarget::L => $self.$fn($self.reg.l, $pos),
+                PrefixTarget::HLIndirect => {
+                    let value = $self.mmu.byte($self.reg.hl());
+                    $self.$fn(value, $pos);
+                    $self.mmu.write_byte($self.reg.hl(), value);
+                }
+            };
+
+            let cycles = match $target {
+                PrefixTarget::HLIndirect => 16,
+                _ => 8
+            };
+
+            ($self.pc.wrapping_add(2), cycles)
+        }
+    };
+}
+
+/// Performs prefix operations on the passed `PrefixTarget` then updates the PrefixTarget with the
+/// new value. The second parameter specifies the operation to be performed. The third and optional
+/// parameter is the bit position.
+/// # Example:
+/// ```rust
+/// prefix!(target, self.rot_left_through_carry_zero_flag, 0);
 /// ```
 macro_rules! prefix {
     ($target:ident, $self:ident.$fn:ident) => {
         {
             match $target {
-                PrefixTarget::A => $self.$fn($self.reg.a),
-                PrefixTarget::B => $self.$fn($self.reg.b),
-                PrefixTarget::C => $self.$fn($self.reg.c),
-                PrefixTarget::D => $self.$fn($self.reg.d),
-                PrefixTarget::E => $self.$fn($self.reg.e),
-                PrefixTarget::H => $self.$fn($self.reg.h),
-                PrefixTarget::L => $self.$fn($self.reg.l),
+                PrefixTarget::A => { let v = $self.$fn($self.reg.a); $self.reg.a = v; }
+                PrefixTarget::B => { let v = $self.$fn($self.reg.b); $self.reg.b = v; }
+                PrefixTarget::C => { let v = $self.$fn($self.reg.c); $self.reg.c = v; }
+                PrefixTarget::D => { let v = $self.$fn($self.reg.d); $self.reg.d = v; }
+                PrefixTarget::E => { let v = $self.$fn($self.reg.e); $self.reg.e = v; }
+                PrefixTarget::H => { let v = $self.$fn($self.reg.h); $self.reg.h = v; }
+                PrefixTarget::L => { let v = $self.$fn($self.reg.l); $self.reg.l = v; }
                 PrefixTarget::HLIndirect => {
                     let value = $self.mmu.byte($self.reg.hl());
                     $self.$fn(value);
@@ -77,13 +112,13 @@ macro_rules! prefix {
     ($target:ident, $self:ident.$fn:ident, $pos:ident) => {
         {
             match $target {
-                PrefixTarget::A => $self.$fn($self.reg.a, $pos),
-                PrefixTarget::B => $self.$fn($self.reg.b, $pos),
-                PrefixTarget::C => $self.$fn($self.reg.c, $pos),
-                PrefixTarget::D => $self.$fn($self.reg.d, $pos),
-                PrefixTarget::E => $self.$fn($self.reg.e, $pos),
-                PrefixTarget::H => $self.$fn($self.reg.h, $pos),
-                PrefixTarget::L => $self.$fn($self.reg.l, $pos),
+                PrefixTarget::A => { let v = $self.$fn($self.reg.a, $pos); $self.reg.a = v; }
+                PrefixTarget::B => { let v = $self.$fn($self.reg.b, $pos); $self.reg.b = v; }
+                PrefixTarget::C => { let v = $self.$fn($self.reg.c, $pos); $self.reg.c = v; }
+                PrefixTarget::D => { let v = $self.$fn($self.reg.d, $pos); $self.reg.d = v; }
+                PrefixTarget::E => { let v = $self.$fn($self.reg.e, $pos); $self.reg.e = v; }
+                PrefixTarget::H => { let v = $self.$fn($self.reg.h, $pos); $self.reg.h = v; }
+                PrefixTarget::L => { let v = $self.$fn($self.reg.l, $pos); $self.reg.l = v; }
                 PrefixTarget::HLIndirect => {
                     let value = $self.mmu.byte($self.reg.hl());
                     $self.$fn(value, $pos);
@@ -150,7 +185,7 @@ impl Cpu {
                 self.jr(cond.is_satisfied(flags))
             },
             // Op::BIT(target, pos) => prefix!(target, self.bit_test, pos),
-            Op::BIT(target, pos) => prefix!(target, self.bit_test, pos),
+            Op::BIT(target, pos) => prefix_test!(target, self.bit_test, pos),
             Op::LD(load_type) => {
                 match load_type {
                     LoadType::Byte(dst, src) => {
@@ -370,7 +405,9 @@ impl Cpu {
             // Op::RST(_) => {}
             // Op::RLC(_) => {}
             // Op::RRC(_) => {}
-            // Op::RL(dst) => self.rl(dst),
+            Op::RL(target) => {
+                prefix!(target, self.rot_left_through_carry_zero_flag)
+            },
             // Op::RR(_) => {}
             // Op::SLA(_) => {}
             // Op::SRA(_) => {}
@@ -384,6 +421,7 @@ impl Cpu {
         self.pc = next_pc;
     }
 
+    // TODO: test
     fn cmp(&mut self, value: u8) {
         self.reg.set_flag(Flag::Zero, self.reg.a == value);
         self.reg.set_flag(Flag::Negative, true);
@@ -394,6 +432,7 @@ impl Cpu {
         self.reg.set_flag(Flag::Carry, self.reg.a < value);
     }
 
+    // TODO: test
     fn xor(&mut self, value: u8) {
         self.reg.a = self.reg.a ^ value;
         self.reg.set_flag(Flag::Zero, self.reg.a == 0);
@@ -402,6 +441,7 @@ impl Cpu {
         self.reg.set_flag(Flag::Carry, false);
     }
 
+    // TODO: test
     fn or(&mut self, value: u8) {
         self.reg.a = self.reg.a | value;
         self.reg.set_flag(Flag::Zero, self.reg.a == 0);
@@ -410,6 +450,7 @@ impl Cpu {
         self.reg.set_flag(Flag::Carry, false);
     }
 
+    // TODO: test
     fn and(&mut self, value: u8) {
         self.reg.a = self.reg.a & value;
         self.reg.set_flag(Flag::Zero, self.reg.a == 0);
@@ -418,6 +459,7 @@ impl Cpu {
         self.reg.set_flag(Flag::Carry, false);
     }
 
+    // TODO: test
     fn bit_test(&mut self, value: u8, pos: u8) {
         let result = (value >> pos) & 0b1;
         self.reg.set_flag(Flag::Zero, result == 0);
@@ -425,6 +467,7 @@ impl Cpu {
         self.reg.set_flag(Flag::HalfCarry, true);
     }
 
+    // TODO: test
     fn jr(&mut self, should_jump: bool) -> (u16, u8) {
         let next_pc = self.pc.wrapping_add(2);
         if should_jump {
@@ -438,6 +481,7 @@ impl Cpu {
         }
     }
 
+    // TODO: test
     fn inc_8bit(&mut self, value: u8) -> u8 {
         let result = value.wrapping_add(1);
         self.reg.set_flag(Flag::Zero, result == 0);
@@ -446,6 +490,7 @@ impl Cpu {
         result
     }
 
+    // TODO: test
     fn inc_16bit(&mut self, value: u16) -> u16 {
         let result = value.wrapping_add(1);
         self.reg.set_flag(Flag::Zero, result == 0);
@@ -454,6 +499,7 @@ impl Cpu {
         result
     }
 
+    // TODO: test
     fn call(&mut self, should_jump: bool) -> (u16, u8) {
         let next_pc = self.pc.wrapping_add(3);
         if should_jump {
@@ -464,11 +510,30 @@ impl Cpu {
         }
     }
 
+    // TODO: test
     fn push(&mut self, value: u16) {
         self.sp = self.sp.wrapping_sub(2);
         self.mmu.write_word(self.sp, value);
     }
 
+    fn rot_left_through_carry_zero_flag(&mut self, value: u8) -> u8 {
+        self.rot_left_through_carry(value, true)
+    }
+
+    // TODO: test
+    fn rot_left_through_carry(&mut self, value: u8, set_zero: bool) -> u8 {
+        let flags: FlagsRegister = self.reg.f.into();
+        let carry_bit = if flags.c { 1 } else { 0 };
+        // shift everything one step to the left, and set whatever carry was set to to the
+        // least significant bit
+        let next_value = (value << 1) | carry_bit;
+        self.reg.set_flag(Flag::Zero, set_zero && next_value == 0);
+        self.reg.set_flag(Flag::Negative, false);
+        self.reg.set_flag(Flag::HalfCarry, false);
+        // shift MSB into carry flag
+        self.reg.set_flag(Flag::Carry, value & 0x80 == 0x80);
+        next_value
+    }
     // fn ld(&mut self, dst: Destination, src: Source) -> u8 {
     //     let src_value = self.value_from_source(src);
     //     self.write_into(dst, src_value);
