@@ -302,7 +302,47 @@ impl Cpu {
             // Op::POP(reg) => self.pop(reg),
             // Op::CALL(condition, addr) => self.call(condition, addr),
             // Op::RET(cond) => self.ret(cond),
-            // Op::INC(dst) => self.inc(dst),
+            Op::INC(target) => {
+                match target {
+                    IncDecTarget::A => self.reg.a = self.inc_8bit(self.reg.a),
+                    IncDecTarget::B => self.reg.b = self.inc_8bit(self.reg.b),
+                    IncDecTarget::C => self.reg.c = self.inc_8bit(self.reg.c),
+                    IncDecTarget::D => self.reg.d = self.inc_8bit(self.reg.d),
+                    IncDecTarget::E => self.reg.e = self.inc_8bit(self.reg.e),
+                    IncDecTarget::H => self.reg.h = self.inc_8bit(self.reg.h),
+                    IncDecTarget::L => self.reg.l = self.inc_8bit(self.reg.l),
+                    IncDecTarget::HL => {
+                        let hl = self.reg.hl();
+                        let new_value = self.inc_16bit(hl);
+                        self.reg.set_hl(new_value);
+                    },
+                    IncDecTarget::BC => {
+                        let bc = self.reg.bc();
+                        let new_value = self.inc_16bit(bc);
+                        self.reg.set_bc(new_value);
+                    },
+                    IncDecTarget::DE => {
+                        let de = self.reg.de();
+                        let new_value = self.inc_16bit(de);
+                        self.reg.set_de(new_value);
+                    },
+                    IncDecTarget::HLIndirect => {
+                        let addr = self.reg.hl();
+                        let value = self.mmu.byte(addr);
+                        let new_value = self.inc_8bit(value);
+                        self.mmu.write_byte(addr, new_value);
+                    },
+                    IncDecTarget::SP => self.sp = self.inc_16bit(self.sp),
+                }
+
+                let cycles = match target {
+                    IncDecTarget::HLIndirect => 12,
+                    IncDecTarget::HL | IncDecTarget::BC | IncDecTarget::DE | IncDecTarget::SP => 8,
+                    _ => 4,
+                };
+
+                (self.pc.wrapping_add(1), cycles)
+            }
             // Op::DEC(dst) => self.dec(dst),
             // Op::LDi8(_, _) => {}
             // Op::ADD(_, _) => {}
@@ -383,6 +423,22 @@ impl Cpu {
         } else {
             (next_pc, 12)
         }
+    }
+
+    fn inc_8bit(&mut self, value: u8) -> u8 {
+        let result = value.wrapping_add(1);
+        self.reg.set_flag(Flag::Zero, result == 0);
+        self.reg.set_flag(Flag::Negative, false);
+        self.reg.set_flag(Flag::HalfCarry, (value & 0x0F) + 1 > 0x0F);
+        result
+    }
+
+    fn inc_16bit(&mut self, value: u16) -> u16 {
+        let result = value.wrapping_add(1);
+        self.reg.set_flag(Flag::Zero, result == 0);
+        self.reg.set_flag(Flag::Negative, false);
+        self.reg.set_flag(Flag::HalfCarry, (value & 0x0F) + 1 > 0x0F);
+        result
     }
 
     // fn ld(&mut self, dst: Destination, src: Source) -> u8 {
