@@ -136,8 +136,8 @@ macro_rules! prefix {
     };
 }
 
-pub struct Cpu {
-    mmu: Mmu,
+pub struct Cpu<'a> {
+    mmu: &'a mut Mmu,
     pub reg: Register,
     // PREFIX, 0xCB
     cb: bool,
@@ -145,8 +145,8 @@ pub struct Cpu {
     pub sp: u16,
 }
 
-impl Cpu {
-    pub fn new(mmu: Mmu) -> Cpu {
+impl<'a> Cpu<'a> {
+    pub fn new(mmu: &'a mut Mmu) -> Cpu {
         Cpu {
             reg: Register::new(),
             mmu,
@@ -177,9 +177,8 @@ impl Cpu {
         }
     }
 
-    pub fn execute_instruction(&mut self, instruction: Op) {
-        // TODO: use _cycles
-        let (next_pc, _cycles) = match instruction {
+    pub fn execute_instruction(&mut self, instruction: Op) -> u8 {
+        let (next_pc, cycles) = match instruction {
             Op::JR(cond) => {
                 let flags: FlagsRegister = self.reg.f.into();
                 self.jr(cond.is_satisfied(flags))
@@ -485,6 +484,7 @@ impl Cpu {
         };
 
         self.pc = next_pc;
+        cycles
     }
 
     // TODO: test
@@ -677,7 +677,7 @@ impl Cpu {
     }
 }
 
-impl fmt::Display for Cpu {
+impl<'a> fmt::Display for Cpu<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,

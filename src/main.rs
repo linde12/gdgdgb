@@ -5,11 +5,13 @@ use anyhow::{self, Context};
 use std::io::stdin;
 
 mod mmu;
+mod ppu;
 mod cpu;
 mod error;
 
 use crate::mmu::Mmu;
 use crate::cpu::Cpu;
+use crate::ppu::Ppu;
 use error::GBError;
 
 fn main() -> anyhow::Result<()> {
@@ -21,14 +23,20 @@ fn main() -> anyhow::Result<()> {
 
     let mut mmu = Mmu::new();
     mmu.load_rom(rom);
-    let mut cpu = Cpu::new(mmu);
+    // Multiple mutable references, not allowed.
+    // Need to think about how we should design this.
+    // Makes sense that ppu should instead own VRAM, but MMU should
+    // still be able to write to VRAM, so MMU would need a mut ref to PPU...
+    let mut cpu = Cpu::new(&mut mmu);
+    let mut ppu = Ppu::new(&mut mmu);
 
     match cmd.as_str() {
         "d" | "disassemble" | "disasm" => loop {
             let pc = cpu.pc;
             let op = cpu.read_instruction()?;
             println!("0x{:04X}\t{:02X?}", pc, op);
-            cpu.execute_instruction(op);
+            let cycles = cpu.execute_instruction(op);
+            ppu.step(cycles);
 
             // let mut buf = String::new();
             // while buf != "\n" {
