@@ -32,9 +32,9 @@ macro_rules! arithmetic {
         };
 
         match $target {
-            ArithmeticTarget::D8(_) => ($self.pc.wrapping_add(2), 8),
-            ArithmeticTarget::HLIndirect => ($self.pc.wrapping_add(1), 8),
-            _ => ($self.pc.wrapping_add(1), 4),
+            ArithmeticTarget::D8(_) => ($self.pc, 8),
+            ArithmeticTarget::HLIndirect => ($self.pc, 8),
+            _ => ($self.pc, 4),
         }
     }};
 }
@@ -67,7 +67,7 @@ macro_rules! prefix_test {
             _ => 8,
         };
 
-        ($self.pc.wrapping_add(2), cycles)
+        ($self.pc, cycles)
     }};
 }
 
@@ -120,7 +120,7 @@ macro_rules! prefix {
             PrefixTarget::HLIndirect => 16,
             _ => 8,
         };
-        ($self.pc.wrapping_add(2), cycles)
+        ($self.pc, cycles)
     }};
 
     ($target:ident, $self:ident.$fn:ident, $pos:ident) => {{
@@ -165,7 +165,7 @@ macro_rules! prefix {
             _ => 8,
         };
 
-        ($self.pc.wrapping_add(2), cycles)
+        ($self.pc, cycles)
     }};
 }
 
@@ -186,14 +186,6 @@ impl Cpu {
         }
     }
 
-    pub fn peek_byte(&mut self) -> u8 {
-        self.mmu.byte(self.pc + 1)
-    }
-
-    pub fn peek_word(&mut self) -> u16 {
-        self.mmu.word(self.pc + 1)
-    }
-
     pub fn read_instruction(&mut self) -> Result<Op, GBError> {
         // TODO: fix error
         let (op, new_pc) =
@@ -206,8 +198,8 @@ impl Cpu {
         // TODO: use _cycles
         let (next_pc, _cycles) = match instruction {
             Op::JR(cond, rel_addr) => {
-                let flags: FlagsRegister = self.reg.f.into();
-                self.jr(cond.is_satisfied(flags), rel_addr)
+                self.jr(cond, rel_addr) // different cycles depending on
+                                        // condition
             }
             // Op::BIT(target, pos) => prefix!(target, self.bit_test, pos),
             Op::BIT(target, pos) => prefix_test!(target, self.bit_test, pos),
@@ -239,11 +231,7 @@ impl Cpu {
                             }
                         };
 
-                        match src {
-                            LoadByteSource::D8(_) => (self.pc.wrapping_add(2), 8),
-                            LoadByteSource::HLIndirect => (self.pc.wrapping_add(1), 8),
-                            _ => (self.pc.wrapping_add(1), 4),
-                        }
+                        (self.pc, 8)
                     }
                     LoadType::Word(dst, src) => {
                         match (dst, src) {
@@ -259,7 +247,7 @@ impl Cpu {
                             (LoadWordTarget::SP, LoadWordSource::D16(word)) => self.sp = word,
                         }
 
-                        (self.pc.wrapping_add(3), 12)
+                        (self.pc, 12)
                     }
                     LoadType::AFromIndirect(src) => {
                         self.reg.a = match src {
@@ -276,16 +264,13 @@ impl Cpu {
                                 self.reg.set_hl(hl.wrapping_add(1));
                                 self.mmu.byte(hl)
                             }
-                            Indirect::Word => {
-                                let word = self.peek_word();
-                                self.mmu.byte(word)
-                            }
+                            Indirect::Word(word) => self.mmu.byte(word),
                             Indirect::FF00PlusC => self.mmu.byte(0xFF00 + self.reg.c as u16),
                         };
 
                         match src {
-                            Indirect::Word => (self.pc.wrapping_add(3), 16),
-                            _ => (self.pc.wrapping_add(1), 8),
+                            Indirect::Word(_) => (self.pc, 16),
+                            _ => (self.pc, 8),
                         }
                     }
                     LoadType::IndirectFromA(dst) => {
@@ -304,37 +289,31 @@ impl Cpu {
                                 self.reg.set_hl(hl.wrapping_add(1));
                                 self.mmu.write_byte(hl, a);
                             }
-                            Indirect::Word => {
-                                let word = self.peek_word();
-                                self.mmu.write_byte(word, a)
-                            }
+                            Indirect::Word(word) => self.mmu.write_byte(word, a),
                             Indirect::FF00PlusC => {
                                 self.mmu.write_byte(0xFF00 + self.reg.c as u16, a)
                             }
                         };
 
                         match dst {
-                            Indirect::Word => (self.pc.wrapping_add(3), 16),
-                            _ => (self.pc.wrapping_add(1), 8),
+                            Indirect::Word(_) => (self.pc, 16),
+                            _ => (self.pc, 8),
                         }
                     }
-                    LoadType::AFromIndirectFF00u8 => {
-                        let byte = self.peek_byte();
+                    LoadType::AFromIndirectFF00u8(byte) => {
                         self.mmu.write_byte(0xFF00 + byte as u16, self.reg.a);
-                        (self.pc.wrapping_add(2), 12)
+                        (self.pc, 12)
                     }
-                    LoadType::IndirectFF00u8FromA => {
-                        let byte = self.peek_byte();
+                    LoadType::IndirectFF00u8FromA(byte) => {
                         self.reg.a = self.mmu.byte(0xFF00 + byte as u16);
-                        (self.pc.wrapping_add(2), 12)
+                        (self.pc, 12)
                     }
                     LoadType::SPFromHL => {
-                        let word = self.peek_word();
-                        self.mmu.write_word(word, self.sp);
-                        (self.pc.wrapping_add(3), 20)
+                        self.sp = self.reg.hl();
+                        (self.pc, 8)
                     }
-                    LoadType::HLFromSPu8 => {
-                        let byte = self.peek_byte() as u16;
+                    LoadType::HLFromSPu8(byte) => {
+                        let byte = byte as u16;
                         self.reg.set_flag(Flag::Zero, false);
                         self.reg.set_flag(Flag::Negative, false);
                         // carry from bit 3 to bit 4?
@@ -343,12 +322,11 @@ impl Cpu {
                         // carry from bit 7 to bit 8?
                         self.reg
                             .set_flag(Flag::Carry, (self.sp & 0xFF) + (byte & 0xFF) > 0xFF);
-                        (self.pc.wrapping_add(2), 12)
+                        (self.pc, 12)
                     }
-                    LoadType::IndirectFromSP => {
-                        let word = self.peek_word();
+                    LoadType::IndirectFromSP(word) => {
                         self.mmu.write_word(word, self.sp);
-                        (self.pc.wrapping_add(3), 20)
+                        (self.pc, 20)
                     }
                 }
             }
@@ -378,7 +356,7 @@ impl Cpu {
                 };
                 self.push(value);
 
-                (self.pc.wrapping_add(1), 16)
+                (self.pc, 16)
             }
             Op::POP(target) => {
                 let value = self.pop();
@@ -389,27 +367,10 @@ impl Cpu {
                     StackTarget::HL => self.reg.set_hl(value),
                 };
 
-                (self.pc.wrapping_add(1), 12)
+                (self.pc, 12)
             }
-            Op::CALL(condition, addr) => {
-                let flags: FlagsRegister = self.reg.f.into();
-                self.call(condition.is_satisfied(flags), addr)
-            }
-            Op::RET(cond) => {
-                let flags: FlagsRegister = self.reg.f.into();
-                let should_jump = cond.is_satisfied(flags);
-                let next_pc = self.ret(should_jump);
-
-                let cycles = if should_jump && cond == Condition::None {
-                    16 // jump
-                } else if should_jump {
-                    20 // jump and read condition
-                } else {
-                    8 // no jump
-                };
-
-                (next_pc, cycles)
-            }
+            Op::CALL(condition, addr) => self.call(condition, addr),
+            Op::RET(cond) => self.ret(cond),
             Op::INC(target) => {
                 match target {
                     IncDecTarget::A => self.reg.a = self.inc_8bit(self.reg.a),
@@ -449,7 +410,7 @@ impl Cpu {
                     _ => 4,
                 };
 
-                (self.pc.wrapping_add(1), cycles)
+                (self.pc, cycles)
             }
             Op::DEC(target) => {
                 match target {
@@ -490,7 +451,7 @@ impl Cpu {
                     _ => 4,
                 };
 
-                (self.pc.wrapping_add(1), cycles)
+                (self.pc, cycles)
             }
             // Op::DEC(dst) => self.dec(dst),
             // Op::LDi8(_, _) => {}
@@ -510,11 +471,11 @@ impl Cpu {
             Op::RR(target) => prefix!(target, self.rot_right_through_carry_zero_flag),
             Op::RLA => {
                 self.reg.a = self.rot_left_through_carry_no_zero_flag(self.reg.a);
-                (self.pc.wrapping_add(1), 4)
+                (self.pc, 4)
             }
             Op::RRA => {
                 self.reg.a = self.rot_right_through_carry_no_zero_flag(self.reg.a);
-                (self.pc.wrapping_add(1), 4)
+                (self.pc, 4)
             }
             // Op::SLA(_) => {}
             // Op::SRA(_) => {}
@@ -576,17 +537,17 @@ impl Cpu {
     }
 
     // TODO: test
-    fn jr(&mut self, should_jump: bool, rel_addr: u8) -> (u16, u8) {
-        // FIXME: all wrong
-        let next_pc = self.pc.wrapping_add(2);
-        if should_jump {
+    fn jr(&mut self, cond: Condition, rel_addr: u8) -> (u16, u8) {
+        let flags: FlagsRegister = self.reg.f.into();
+        if cond.is_satisfied(flags) {
             // let relative_offset = self.peek_byte() as i8;
             // relative offset will be cast to u16, so e.g. -5 will become a large number and
-            // wrapping_add will make sure it wraps to zero and thus negative relative offsets will work
-            let next_pc = next_pc.wrapping_add(rel_addr as u16);
-            (next_pc, 16)
-        } else {
+            // wrapping_add will make sure that pc wraps to zero and thus negative relative offsets will work
+            let next_pc = self.pc.wrapping_add(rel_addr as i8 as u16);
+            println!("next pc will be 0x{:04X}", next_pc);
             (next_pc, 12)
+        } else {
+            (self.pc, 8)
         }
     }
 
@@ -620,14 +581,13 @@ impl Cpu {
     }
 
     // TODO: test
-    fn call(&mut self, should_jump: bool, rel_addr: u16) -> (u16, u8) {
-        // FIXME: all wrong
-        let next_pc = self.pc.wrapping_add(3);
-        if should_jump {
-            self.push(next_pc);
-            (rel_addr, 24)
+    fn call(&mut self, cond: Condition, addr: u16) -> (u16, u8) {
+        let flags: FlagsRegister = self.reg.f.into();
+        if cond.is_satisfied(flags) {
+            self.push(self.pc);
+            (addr, 24)
         } else {
-            (next_pc, 12)
+            (self.pc, 12)
         }
     }
 
@@ -712,11 +672,17 @@ impl Cpu {
     //     8
     // }
 
-    fn ret(&mut self, should_jump: bool) -> u16 {
-        if should_jump {
-            self.pop() // pop return address
+    fn ret(&mut self, cond: Condition) -> (u16, u8) {
+        let flags: FlagsRegister = self.reg.f.into();
+        if cond.is_satisfied(flags) {
+            let cycles = match cond {
+                Condition::None => 16,
+                _ => 20,
+            };
+
+            (self.pop(), cycles) // pop return address
         } else {
-            self.pc.wrapping_add(1) // otherwise continue executing next addr
+            (self.pc, 8)
         }
     }
 }

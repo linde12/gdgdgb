@@ -8,11 +8,11 @@ pub enum LoadType {
     Word(LoadWordTarget, LoadWordSource),
     AFromIndirect(Indirect),
     IndirectFromA(Indirect),
-    AFromIndirectFF00u8,
-    IndirectFF00u8FromA,
+    AFromIndirectFF00u8(u8),
+    IndirectFF00u8FromA(u8),
     SPFromHL,
-    HLFromSPu8,
-    IndirectFromSP,
+    HLFromSPu8(u8),
+    IndirectFromSP(u16),
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -22,7 +22,7 @@ pub enum Indirect {
     HL,
     HLD,
     HLI,
-    Word,
+    Word(u16),
     FF00PlusC,
 }
 
@@ -461,21 +461,45 @@ impl Op {
             0x1A => Some(Op::LD(LoadType::AFromIndirect(Indirect::DE))),
             0x2A => Some(Op::LD(LoadType::AFromIndirect(Indirect::HLI))),
             0x3A => Some(Op::LD(LoadType::AFromIndirect(Indirect::HLD))),
-            0xFA => Some(Op::LD(LoadType::AFromIndirect(Indirect::Word))),
+            0xFA => {
+                let op = Op::LD(LoadType::AFromIndirect(Indirect::Word(mmu.word(pc + 1))));
+                pc += 2;
+                Some(op)
+            }
 
             0xE2 => Some(Op::LD(LoadType::IndirectFromA(Indirect::FF00PlusC))),
             0x02 => Some(Op::LD(LoadType::IndirectFromA(Indirect::BC))),
             0x12 => Some(Op::LD(LoadType::IndirectFromA(Indirect::DE))),
             0x22 => Some(Op::LD(LoadType::IndirectFromA(Indirect::HLI))),
             0x32 => Some(Op::LD(LoadType::IndirectFromA(Indirect::HLD))),
-            0xEA => Some(Op::LD(LoadType::IndirectFromA(Indirect::Word))),
+            0xEA => {
+                let op = Op::LD(LoadType::IndirectFromA(Indirect::Word(mmu.word(pc + 1))));
+                pc += 2;
+                Some(op)
+            }
 
-            0xE0 => Some(Op::LD(LoadType::IndirectFF00u8FromA)),
-            0xF0 => Some(Op::LD(LoadType::AFromIndirectFF00u8)),
+            0xE0 => {
+                let op = Op::LD(LoadType::IndirectFF00u8FromA(mmu.byte(pc + 1)));
+                pc += 1;
+                Some(op)
+            }
+            0xF0 => {
+                let op = Op::LD(LoadType::AFromIndirectFF00u8(mmu.byte(pc + 1)));
+                pc += 1;
+                Some(op)
+            }
 
-            0x08 => Some(Op::LD(LoadType::IndirectFromSP)),
+            0x08 => {
+                let op = Op::LD(LoadType::IndirectFromSP(mmu.word(pc + 1)));
+                pc += 2;
+                Some(op)
+            }
             0xF9 => Some(Op::LD(LoadType::SPFromHL)),
-            0xF8 => Some(Op::LD(LoadType::HLFromSPu8)),
+            0xF8 => {
+                let op = Op::LD(LoadType::HLFromSPu8(mmu.byte(pc + 1)));
+                pc += 1;
+                Some(op)
+            }
 
             0x87 => Some(Op::ADD(ArithmeticTarget::A)),
             0x80 => Some(Op::ADD(ArithmeticTarget::B)),
