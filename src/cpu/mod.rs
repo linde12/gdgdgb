@@ -2,8 +2,8 @@ pub mod op;
 pub mod register;
 use crate::error::GBError;
 use crate::mmu::Mmu;
-use register::{Flag, FlagsRegister, Register};
 use op::*;
+use register::{Flag, FlagsRegister, Register};
 use std::fmt;
 
 /// Performs ALU operation on the passed `ArithmeticTarget`. The second parameter specifies the
@@ -13,33 +13,30 @@ use std::fmt;
 /// arithmetic!(target, self.xor);
 /// ```
 macro_rules! arithmetic {
-    ($target:ident, $self:ident.$fn:ident) => {
-        {
-            match $target {
-                ArithmeticTarget::A => $self.$fn($self.reg.a),
-                ArithmeticTarget::B => $self.$fn($self.reg.b),
-                ArithmeticTarget::C => $self.$fn($self.reg.c),
-                ArithmeticTarget::D => $self.$fn($self.reg.d),
-                ArithmeticTarget::E => $self.$fn($self.reg.e),
-                ArithmeticTarget::H => $self.$fn($self.reg.h),
-                ArithmeticTarget::L => $self.$fn($self.reg.l),
-                ArithmeticTarget::D8 => {
-                    let byte = $self.peek_byte();
-                    $self.$fn(byte);
-                },
-                ArithmeticTarget::HLIndirect => {
-                    let value = $self.mmu.byte($self.reg.hl());
-                    $self.$fn(value);
-                }
-            };
-
-            match $target {
-                ArithmeticTarget::D8  => ($self.pc.wrapping_add(2), 8),
-                ArithmeticTarget::HLIndirect => ($self.pc.wrapping_add(1), 8),
-                _ => ($self.pc.wrapping_add(1), 4)
+    ($target:ident, $self:ident.$fn:ident) => {{
+        match $target {
+            ArithmeticTarget::A => $self.$fn($self.reg.a),
+            ArithmeticTarget::B => $self.$fn($self.reg.b),
+            ArithmeticTarget::C => $self.$fn($self.reg.c),
+            ArithmeticTarget::D => $self.$fn($self.reg.d),
+            ArithmeticTarget::E => $self.$fn($self.reg.e),
+            ArithmeticTarget::H => $self.$fn($self.reg.h),
+            ArithmeticTarget::L => $self.$fn($self.reg.l),
+            ArithmeticTarget::D8(byte) => {
+                $self.$fn(byte);
             }
+            ArithmeticTarget::HLIndirect => {
+                let value = $self.mmu.byte($self.reg.hl());
+                $self.$fn(value);
+            }
+        };
+
+        match $target {
+            ArithmeticTarget::D8(_) => ($self.pc.wrapping_add(2), 8),
+            ArithmeticTarget::HLIndirect => ($self.pc.wrapping_add(1), 8),
+            _ => ($self.pc.wrapping_add(1), 4),
         }
-    };
+    }};
 }
 
 /// Performs prefix operations on the passed `PrefixTarget`. The second parameter specifies the
@@ -49,31 +46,29 @@ macro_rules! arithmetic {
 /// prefix_test!(target, self.bit_test, 0);
 /// ```
 macro_rules! prefix_test {
-    ($target:ident, $self:ident.$fn:ident, $pos:ident) => {
-        {
-            match $target {
-                PrefixTarget::A => $self.$fn($self.reg.a, $pos),
-                PrefixTarget::B => $self.$fn($self.reg.b, $pos),
-                PrefixTarget::C => $self.$fn($self.reg.c, $pos),
-                PrefixTarget::D => $self.$fn($self.reg.d, $pos),
-                PrefixTarget::E => $self.$fn($self.reg.e, $pos),
-                PrefixTarget::H => $self.$fn($self.reg.h, $pos),
-                PrefixTarget::L => $self.$fn($self.reg.l, $pos),
-                PrefixTarget::HLIndirect => {
-                    let value = $self.mmu.byte($self.reg.hl());
-                    $self.$fn(value, $pos);
-                    $self.mmu.write_byte($self.reg.hl(), value);
-                }
-            };
+    ($target:ident, $self:ident.$fn:ident, $pos:ident) => {{
+        match $target {
+            PrefixTarget::A => $self.$fn($self.reg.a, $pos),
+            PrefixTarget::B => $self.$fn($self.reg.b, $pos),
+            PrefixTarget::C => $self.$fn($self.reg.c, $pos),
+            PrefixTarget::D => $self.$fn($self.reg.d, $pos),
+            PrefixTarget::E => $self.$fn($self.reg.e, $pos),
+            PrefixTarget::H => $self.$fn($self.reg.h, $pos),
+            PrefixTarget::L => $self.$fn($self.reg.l, $pos),
+            PrefixTarget::HLIndirect => {
+                let value = $self.mmu.byte($self.reg.hl());
+                $self.$fn(value, $pos);
+                $self.mmu.write_byte($self.reg.hl(), value);
+            }
+        };
 
-            let cycles = match $target {
-                PrefixTarget::HLIndirect => 16,
-                _ => 8
-            };
+        let cycles = match $target {
+            PrefixTarget::HLIndirect => 16,
+            _ => 8,
+        };
 
-            ($self.pc.wrapping_add(2), cycles)
-        }
-    };
+        ($self.pc.wrapping_add(2), cycles)
+    }};
 }
 
 /// Performs prefix operations on the passed `PrefixTarget` then updates the PrefixTarget with the
@@ -84,63 +79,99 @@ macro_rules! prefix_test {
 /// prefix!(target, self.rot_left_through_carry_zero_flag, 0);
 /// ```
 macro_rules! prefix {
-    ($target:ident, $self:ident.$fn:ident) => {
-        {
-            match $target {
-                PrefixTarget::A => { let v = $self.$fn($self.reg.a); $self.reg.a = v; }
-                PrefixTarget::B => { let v = $self.$fn($self.reg.b); $self.reg.b = v; }
-                PrefixTarget::C => { let v = $self.$fn($self.reg.c); $self.reg.c = v; }
-                PrefixTarget::D => { let v = $self.$fn($self.reg.d); $self.reg.d = v; }
-                PrefixTarget::E => { let v = $self.$fn($self.reg.e); $self.reg.e = v; }
-                PrefixTarget::H => { let v = $self.$fn($self.reg.h); $self.reg.h = v; }
-                PrefixTarget::L => { let v = $self.$fn($self.reg.l); $self.reg.l = v; }
-                PrefixTarget::HLIndirect => {
-                    let value = $self.mmu.byte($self.reg.hl());
-                    $self.$fn(value);
-                    $self.mmu.write_byte($self.reg.hl(), value);
-                }
-            };
+    ($target:ident, $self:ident.$fn:ident) => {{
+        match $target {
+            PrefixTarget::A => {
+                let v = $self.$fn($self.reg.a);
+                $self.reg.a = v;
+            }
+            PrefixTarget::B => {
+                let v = $self.$fn($self.reg.b);
+                $self.reg.b = v;
+            }
+            PrefixTarget::C => {
+                let v = $self.$fn($self.reg.c);
+                $self.reg.c = v;
+            }
+            PrefixTarget::D => {
+                let v = $self.$fn($self.reg.d);
+                $self.reg.d = v;
+            }
+            PrefixTarget::E => {
+                let v = $self.$fn($self.reg.e);
+                $self.reg.e = v;
+            }
+            PrefixTarget::H => {
+                let v = $self.$fn($self.reg.h);
+                $self.reg.h = v;
+            }
+            PrefixTarget::L => {
+                let v = $self.$fn($self.reg.l);
+                $self.reg.l = v;
+            }
+            PrefixTarget::HLIndirect => {
+                let value = $self.mmu.byte($self.reg.hl());
+                $self.$fn(value);
+                $self.mmu.write_byte($self.reg.hl(), value);
+            }
+        };
 
-            let cycles = match $target {
-                PrefixTarget::HLIndirect => 16,
-                _ => 8
-            };
-            ($self.pc.wrapping_add(2), cycles)
-        }
-    };
+        let cycles = match $target {
+            PrefixTarget::HLIndirect => 16,
+            _ => 8,
+        };
+        ($self.pc.wrapping_add(2), cycles)
+    }};
 
-    ($target:ident, $self:ident.$fn:ident, $pos:ident) => {
-        {
-            match $target {
-                PrefixTarget::A => { let v = $self.$fn($self.reg.a, $pos); $self.reg.a = v; }
-                PrefixTarget::B => { let v = $self.$fn($self.reg.b, $pos); $self.reg.b = v; }
-                PrefixTarget::C => { let v = $self.$fn($self.reg.c, $pos); $self.reg.c = v; }
-                PrefixTarget::D => { let v = $self.$fn($self.reg.d, $pos); $self.reg.d = v; }
-                PrefixTarget::E => { let v = $self.$fn($self.reg.e, $pos); $self.reg.e = v; }
-                PrefixTarget::H => { let v = $self.$fn($self.reg.h, $pos); $self.reg.h = v; }
-                PrefixTarget::L => { let v = $self.$fn($self.reg.l, $pos); $self.reg.l = v; }
-                PrefixTarget::HLIndirect => {
-                    let value = $self.mmu.byte($self.reg.hl());
-                    $self.$fn(value, $pos);
-                    $self.mmu.write_byte($self.reg.hl(), value);
-                }
-            };
+    ($target:ident, $self:ident.$fn:ident, $pos:ident) => {{
+        match $target {
+            PrefixTarget::A => {
+                let v = $self.$fn($self.reg.a, $pos);
+                $self.reg.a = v;
+            }
+            PrefixTarget::B => {
+                let v = $self.$fn($self.reg.b, $pos);
+                $self.reg.b = v;
+            }
+            PrefixTarget::C => {
+                let v = $self.$fn($self.reg.c, $pos);
+                $self.reg.c = v;
+            }
+            PrefixTarget::D => {
+                let v = $self.$fn($self.reg.d, $pos);
+                $self.reg.d = v;
+            }
+            PrefixTarget::E => {
+                let v = $self.$fn($self.reg.e, $pos);
+                $self.reg.e = v;
+            }
+            PrefixTarget::H => {
+                let v = $self.$fn($self.reg.h, $pos);
+                $self.reg.h = v;
+            }
+            PrefixTarget::L => {
+                let v = $self.$fn($self.reg.l, $pos);
+                $self.reg.l = v;
+            }
+            PrefixTarget::HLIndirect => {
+                let value = $self.mmu.byte($self.reg.hl());
+                $self.$fn(value, $pos);
+                $self.mmu.write_byte($self.reg.hl(), value);
+            }
+        };
 
-            let cycles = match $target {
-                PrefixTarget::HLIndirect => 16,
-                _ => 8
-            };
+        let cycles = match $target {
+            PrefixTarget::HLIndirect => 16,
+            _ => 8,
+        };
 
-            ($self.pc.wrapping_add(2), cycles)
-        }
-    };
+        ($self.pc.wrapping_add(2), cycles)
+    }};
 }
 
 pub struct Cpu {
     mmu: Mmu,
     pub reg: Register,
-    // PREFIX, 0xCB
-    cb: bool,
     pub pc: u16,
     pub sp: u16,
 }
@@ -150,7 +181,6 @@ impl Cpu {
         Cpu {
             reg: Register::new(),
             mmu,
-            cb: false,
             pc: 0,
             sp: 0,
         }
@@ -165,25 +195,20 @@ impl Cpu {
     }
 
     pub fn read_instruction(&mut self) -> Result<Op, GBError> {
-        let mut byte = self.mmu.byte(self.pc);
-        let is_prefix = byte == 0xCB;
-        if is_prefix {
-            self.cb = true;
-            byte = self.peek_byte();
-            Op::from_byte(byte, self.cb).ok_or_else(|| GBError::UnknownPrefixedOperation(byte))
-        } else {
-            self.cb = false;
-            Op::from_byte(byte, self.cb).ok_or_else(|| GBError::UnknownOperation(byte))
-        }
+        // TODO: fix error
+        let (op, new_pc) =
+            Op::read_op(&mut self.mmu, self.pc).ok_or_else(|| GBError::BadCommand)?;
+        self.pc = new_pc;
+        Ok(op)
     }
 
     pub fn execute_instruction(&mut self, instruction: Op) {
         // TODO: use _cycles
         let (next_pc, _cycles) = match instruction {
-            Op::JR(cond) => {
+            Op::JR(cond, rel_addr) => {
                 let flags: FlagsRegister = self.reg.f.into();
-                self.jr(cond.is_satisfied(flags))
-            },
+                self.jr(cond.is_satisfied(flags), rel_addr)
+            }
             // Op::BIT(target, pos) => prefix!(target, self.bit_test, pos),
             Op::BIT(target, pos) => prefix_test!(target, self.bit_test, pos),
             Op::LD(load_type) => {
@@ -197,7 +222,7 @@ impl Cpu {
                             LoadByteSource::E => self.reg.e,
                             LoadByteSource::H => self.reg.h,
                             LoadByteSource::L => self.reg.l,
-                            LoadByteSource::D8 => self.peek_byte(),
+                            LoadByteSource::D8(byte) => byte,
                             LoadByteSource::HLIndirect => self.mmu.byte(self.reg.hl()),
                         };
 
@@ -209,73 +234,87 @@ impl Cpu {
                             LoadByteTarget::E => self.reg.e = src_value,
                             LoadByteTarget::H => self.reg.h = src_value,
                             LoadByteTarget::L => self.reg.l = src_value,
-                            LoadByteTarget::HLIndirect => self.mmu.write_byte(self.reg.hl(), src_value),
+                            LoadByteTarget::HLIndirect => {
+                                self.mmu.write_byte(self.reg.hl(), src_value)
+                            }
                         };
 
                         match src {
-                            LoadByteSource::D8 => (self.pc.wrapping_add(2), 8),
+                            LoadByteSource::D8(_) => (self.pc.wrapping_add(2), 8),
                             LoadByteSource::HLIndirect => (self.pc.wrapping_add(1), 8),
                             _ => (self.pc.wrapping_add(1), 4),
                         }
                     }
-                    LoadType::Word(dst) => {
-                        let word = self.peek_word();
-                        match dst {
-                            LoadWordTarget::BC => self.reg.set_bc(word),
-                            LoadWordTarget::DE => self.reg.set_de(word),
-                            LoadWordTarget::HL => self.reg.set_hl(word),
-                            LoadWordTarget::SP => self.sp = word,
+                    LoadType::Word(dst, src) => {
+                        match (dst, src) {
+                            (LoadWordTarget::BC, LoadWordSource::D16(word)) => {
+                                self.reg.set_bc(word)
+                            }
+                            (LoadWordTarget::DE, LoadWordSource::D16(word)) => {
+                                self.reg.set_de(word)
+                            }
+                            (LoadWordTarget::HL, LoadWordSource::D16(word)) => {
+                                self.reg.set_hl(word)
+                            }
+                            (LoadWordTarget::SP, LoadWordSource::D16(word)) => self.sp = word,
                         }
 
                         (self.pc.wrapping_add(3), 12)
                     }
                     LoadType::AFromIndirect(src) => {
                         self.reg.a = match src {
-                            Indirect::BCIndirect => self.mmu.byte(self.reg.bc()),
-                            Indirect::DEIndirect => self.mmu.byte(self.reg.de()),
-                            Indirect::HLDIndirect => {
+                            Indirect::BC => self.mmu.byte(self.reg.bc()),
+                            Indirect::DE => self.mmu.byte(self.reg.de()),
+                            Indirect::HL => self.mmu.byte(self.reg.hl()),
+                            Indirect::HLD => {
                                 let hl = self.reg.hl();
                                 self.reg.set_hl(hl.wrapping_sub(1));
                                 self.mmu.byte(hl)
                             }
-                            Indirect::HLIIndirect => {
+                            Indirect::HLI => {
                                 let hl = self.reg.hl();
                                 self.reg.set_hl(hl.wrapping_add(1));
                                 self.mmu.byte(hl)
                             }
-                            Indirect::WordIndirect => { let word = self.peek_word(); self.mmu.byte(word) },
+                            Indirect::Word => {
+                                let word = self.peek_word();
+                                self.mmu.byte(word)
+                            }
                             Indirect::FF00PlusC => self.mmu.byte(0xFF00 + self.reg.c as u16),
                         };
 
                         match src {
-                            Indirect::WordIndirect => (self.pc.wrapping_add(3), 16),
+                            Indirect::Word => (self.pc.wrapping_add(3), 16),
                             _ => (self.pc.wrapping_add(1), 8),
                         }
                     }
                     LoadType::IndirectFromA(dst) => {
                         let a = self.reg.a;
                         match dst {
-                            Indirect::BCIndirect => self.mmu.write_byte(self.reg.bc(), a),
-                            Indirect::DEIndirect => self.mmu.write_byte(self.reg.de(), a),
-                            Indirect::HLDIndirect => {
+                            Indirect::BC => self.mmu.write_byte(self.reg.bc(), a),
+                            Indirect::DE => self.mmu.write_byte(self.reg.de(), a),
+                            Indirect::HL => self.mmu.write_byte(self.reg.hl(), a),
+                            Indirect::HLD => {
                                 let hl = self.reg.hl();
                                 self.reg.set_hl(hl.wrapping_sub(1));
                                 self.mmu.write_byte(hl, a);
                             }
-                            Indirect::HLIIndirect => {
+                            Indirect::HLI => {
                                 let hl = self.reg.hl();
                                 self.reg.set_hl(hl.wrapping_add(1));
                                 self.mmu.write_byte(hl, a);
                             }
-                            Indirect::WordIndirect => {
+                            Indirect::Word => {
                                 let word = self.peek_word();
                                 self.mmu.write_byte(word, a)
                             }
-                            Indirect::FF00PlusC => self.mmu.write_byte(0xFF00 + self.reg.c as u16, a),
+                            Indirect::FF00PlusC => {
+                                self.mmu.write_byte(0xFF00 + self.reg.c as u16, a)
+                            }
                         };
 
                         match dst {
-                            Indirect::WordIndirect => (self.pc.wrapping_add(3), 16),
+                            Indirect::Word => (self.pc.wrapping_add(3), 16),
                             _ => (self.pc.wrapping_add(1), 8),
                         }
                     }
@@ -299,9 +338,11 @@ impl Cpu {
                         self.reg.set_flag(Flag::Zero, false);
                         self.reg.set_flag(Flag::Negative, false);
                         // carry from bit 3 to bit 4?
-                        self.reg.set_flag(Flag::HalfCarry, (self.sp & 0x0F) + (byte & 0x0F) > 0xF0);
+                        self.reg
+                            .set_flag(Flag::HalfCarry, (self.sp & 0x0F) + (byte & 0x0F) > 0xF0);
                         // carry from bit 7 to bit 8?
-                        self.reg.set_flag(Flag::Carry, (self.sp & 0xFF) + (byte & 0xFF) > 0xFF);
+                        self.reg
+                            .set_flag(Flag::Carry, (self.sp & 0xFF) + (byte & 0xFF) > 0xFF);
                         (self.pc.wrapping_add(2), 12)
                     }
                     LoadType::IndirectFromSP => {
@@ -338,7 +379,7 @@ impl Cpu {
                 self.push(value);
 
                 (self.pc.wrapping_add(1), 16)
-            },
+            }
             Op::POP(target) => {
                 let value = self.pop();
                 match target {
@@ -350,10 +391,10 @@ impl Cpu {
 
                 (self.pc.wrapping_add(1), 12)
             }
-            Op::CALL(condition) => {
+            Op::CALL(condition, addr) => {
                 let flags: FlagsRegister = self.reg.f.into();
-                self.call(condition.is_satisfied(flags))
-            },
+                self.call(condition.is_satisfied(flags), addr)
+            }
             Op::RET(cond) => {
                 let flags: FlagsRegister = self.reg.f.into();
                 let should_jump = cond.is_satisfied(flags);
@@ -364,11 +405,11 @@ impl Cpu {
                 } else if should_jump {
                     20 // jump and read condition
                 } else {
-                    8  // no jump
+                    8 // no jump
                 };
 
                 (next_pc, cycles)
-            },
+            }
             Op::INC(target) => {
                 match target {
                     IncDecTarget::A => self.reg.a = self.inc_8bit(self.reg.a),
@@ -382,23 +423,23 @@ impl Cpu {
                         let hl = self.reg.hl();
                         let new_value = self.inc_16bit(hl);
                         self.reg.set_hl(new_value);
-                    },
+                    }
                     IncDecTarget::BC => {
                         let bc = self.reg.bc();
                         let new_value = self.inc_16bit(bc);
                         self.reg.set_bc(new_value);
-                    },
+                    }
                     IncDecTarget::DE => {
                         let de = self.reg.de();
                         let new_value = self.inc_16bit(de);
                         self.reg.set_de(new_value);
-                    },
+                    }
                     IncDecTarget::HLIndirect => {
                         let addr = self.reg.hl();
                         let value = self.mmu.byte(addr);
                         let new_value = self.inc_8bit(value);
                         self.mmu.write_byte(addr, new_value);
-                    },
+                    }
                     IncDecTarget::SP => self.sp = self.inc_16bit(self.sp),
                 }
 
@@ -423,23 +464,23 @@ impl Cpu {
                         let hl = self.reg.hl();
                         let new_value = self.dec_16bit(hl);
                         self.reg.set_hl(new_value);
-                    },
+                    }
                     IncDecTarget::BC => {
                         let bc = self.reg.bc();
                         let new_value = self.dec_16bit(bc);
                         self.reg.set_bc(new_value);
-                    },
+                    }
                     IncDecTarget::DE => {
                         let de = self.reg.de();
                         let new_value = self.dec_16bit(de);
                         self.reg.set_de(new_value);
-                    },
+                    }
                     IncDecTarget::HLIndirect => {
                         let addr = self.reg.hl();
                         let value = self.mmu.byte(addr);
                         let new_value = self.dec_8bit(value);
                         self.mmu.write_byte(addr, new_value);
-                    },
+                    }
                     IncDecTarget::SP => self.sp = self.dec_16bit(self.sp),
                 }
 
@@ -494,7 +535,8 @@ impl Cpu {
         // cmp is done by subtracting value from A and checking if it equals zero
         // so if value is greater than A we will end up with something less than zero, thus
         // carrying
-        self.reg.set_flag(Flag::HalfCarry, (self.reg.a & 0x0F) < (value & 0x0F));
+        self.reg
+            .set_flag(Flag::HalfCarry, (self.reg.a & 0x0F) < (value & 0x0F));
         self.reg.set_flag(Flag::Carry, self.reg.a < value);
     }
 
@@ -534,13 +576,14 @@ impl Cpu {
     }
 
     // TODO: test
-    fn jr(&mut self, should_jump: bool) -> (u16, u8) {
+    fn jr(&mut self, should_jump: bool, rel_addr: u8) -> (u16, u8) {
+        // FIXME: all wrong
         let next_pc = self.pc.wrapping_add(2);
         if should_jump {
-            let relative_offset = self.peek_byte() as i8;
+            // let relative_offset = self.peek_byte() as i8;
             // relative offset will be cast to u16, so e.g. -5 will become a large number and
             // wrapping_add will make sure it wraps to zero and thus negative relative offsets will work
-            let next_pc = next_pc.wrapping_add(relative_offset as u16);
+            let next_pc = next_pc.wrapping_add(rel_addr as u16);
             (next_pc, 16)
         } else {
             (next_pc, 12)
@@ -552,7 +595,8 @@ impl Cpu {
         let result = value.wrapping_add(1);
         self.reg.set_flag(Flag::Zero, result == 0);
         self.reg.set_flag(Flag::Negative, false);
-        self.reg.set_flag(Flag::HalfCarry, (value & 0x0F) + 1 > 0x0F);
+        self.reg
+            .set_flag(Flag::HalfCarry, (value & 0x0F) + 1 > 0x0F);
         result
     }
 
@@ -576,11 +620,12 @@ impl Cpu {
     }
 
     // TODO: test
-    fn call(&mut self, should_jump: bool) -> (u16, u8) {
+    fn call(&mut self, should_jump: bool, rel_addr: u16) -> (u16, u8) {
+        // FIXME: all wrong
         let next_pc = self.pc.wrapping_add(3);
         if should_jump {
             self.push(next_pc);
-            (self.peek_word(), 24)
+            (rel_addr, 24)
         } else {
             (next_pc, 12)
         }
@@ -593,7 +638,7 @@ impl Cpu {
     }
 
     // TODO: test
-    fn pop(&mut self, ) -> u16 {
+    fn pop(&mut self) -> u16 {
         let value = self.mmu.word(self.sp);
         self.sp += 2;
         value
@@ -666,7 +711,6 @@ impl Cpu {
 
     //     8
     // }
-
 
     fn ret(&mut self, should_jump: bool) -> u16 {
         if should_jump {

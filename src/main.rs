@@ -1,15 +1,15 @@
+use anyhow::{self, Context};
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
-use anyhow::{self, Context};
 use std::io::stdin;
 
-mod mmu;
 mod cpu;
 mod error;
+mod mmu;
 
-use crate::mmu::Mmu;
 use crate::cpu::Cpu;
+use crate::mmu::Mmu;
 use error::GBError;
 
 fn main() -> anyhow::Result<()> {
@@ -28,7 +28,7 @@ fn main() -> anyhow::Result<()> {
             let pc = cpu.pc;
             let op = cpu.read_instruction()?;
             println!("0x{:04X}\t{:02X?}", pc, op);
-            cpu.execute_instruction(op);
+            // cpu.execute_instruction(op);
 
             // let mut buf = String::new();
             // while buf != "\n" {
@@ -40,9 +40,11 @@ fn main() -> anyhow::Result<()> {
             // }
         },
         "r" | "run" => loop {
+            let pc = cpu.pc;
             let op = cpu.read_instruction()?;
+            println!("0x{:04X}\t{:02X?}", pc, op);
             cpu.execute_instruction(op);
-        }
+        },
         _ => Err(GBError::BadCommand.into()),
     }
 }
