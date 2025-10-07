@@ -3,7 +3,7 @@ pub mod register;
 use crate::error::GBError;
 use crate::mmu::Mmu;
 use op::*;
-use register::{Flag, FlagsRegister, Register};
+use register::{Flag, Register};
 use std::fmt;
 
 /// Performs ALU operation on the passed `ArithmeticTarget`. The second parameter specifies the
@@ -13,7 +13,7 @@ use std::fmt;
 /// arithmetic!(target, self.xor);
 /// ```
 macro_rules! arithmetic {
-    ($target:ident, $self:ident.$fn:ident) => {{
+    ($target:ident, $self:ident.$fn:ident, $mmu:ident) => {{
         match $target {
             ArithmeticTarget::A => $self.$fn($self.reg.a),
             ArithmeticTarget::B => $self.$fn($self.reg.b),
@@ -26,7 +26,7 @@ macro_rules! arithmetic {
                 $self.$fn(byte);
             }
             ArithmeticTarget::HLIndirect => {
-                let value = $self.mmu.byte($self.reg.hl());
+                let value = $mmu.byte($self.reg.hl());
                 $self.$fn(value);
             }
         };
@@ -46,7 +46,7 @@ macro_rules! arithmetic {
 /// prefix_test!(target, self.bit_test, 0);
 /// ```
 macro_rules! prefix_test {
-    ($target:ident, $self:ident.$fn:ident, $pos:ident) => {{
+    ($target:ident, $self:ident.$fn:ident, $pos:ident, $mmu:ident) => {{
         match $target {
             PrefixTarget::A => $self.$fn($self.reg.a, $pos),
             PrefixTarget::B => $self.$fn($self.reg.b, $pos),
@@ -56,9 +56,9 @@ macro_rules! prefix_test {
             PrefixTarget::H => $self.$fn($self.reg.h, $pos),
             PrefixTarget::L => $self.$fn($self.reg.l, $pos),
             PrefixTarget::HLIndirect => {
-                let value = $self.mmu.byte($self.reg.hl());
+                let value = $mmu.byte($self.reg.hl());
                 $self.$fn(value, $pos);
-                $self.mmu.write_byte($self.reg.hl(), value);
+                $mmu.write_byte($self.reg.hl(), value);
             }
         };
 
@@ -79,7 +79,7 @@ macro_rules! prefix_test {
 /// prefix!(target, self.rot_left_through_carry_zero_flag, 0);
 /// ```
 macro_rules! prefix {
-    ($target:ident, $self:ident.$fn:ident) => {{
+    ($target:ident, $self:ident.$fn:ident, $mmu:ident) => {{
         match $target {
             PrefixTarget::A => {
                 let v = $self.$fn($self.reg.a);
@@ -110,9 +110,9 @@ macro_rules! prefix {
                 $self.reg.l = v;
             }
             PrefixTarget::HLIndirect => {
-                let value = $self.mmu.byte($self.reg.hl());
+                let value = $mmu.byte($self.reg.hl());
                 $self.$fn(value);
-                $self.mmu.write_byte($self.reg.hl(), value);
+                $mmu.write_byte($self.reg.hl(), value);
             }
         };
 
@@ -123,7 +123,7 @@ macro_rules! prefix {
         ($self.pc, cycles)
     }};
 
-    ($target:ident, $self:ident.$fn:ident, $pos:ident) => {{
+    ($target:ident, $self:ident.$fn:ident, $pos:ident, $mmu:ident) => {{
         match $target {
             PrefixTarget::A => {
                 let v = $self.$fn($self.reg.a, $pos);
@@ -154,9 +154,9 @@ macro_rules! prefix {
                 $self.reg.l = v;
             }
             PrefixTarget::HLIndirect => {
-                let value = $self.mmu.byte($self.reg.hl());
+                let value = $mmu.byte($self.reg.hl());
                 $self.$fn(value, $pos);
-                $self.mmu.write_byte($self.reg.hl(), value);
+                $mmu.write_byte($self.reg.hl(), value);
             }
         };
 
@@ -170,39 +170,36 @@ macro_rules! prefix {
 }
 
 pub struct Cpu {
-    mmu: Mmu,
     pub reg: Register,
     pub pc: u16,
     pub sp: u16,
 }
 
 impl Cpu {
-    pub fn new(mmu: Mmu) -> Cpu {
+    pub fn new() -> Cpu {
         Cpu {
             reg: Register::new(),
-            mmu,
             pc: 0,
             sp: 0,
         }
     }
 
-    pub fn read_instruction(&mut self) -> Result<Op, GBError> {
+    pub fn read_instruction(&mut self, mmu: &mut Mmu) -> Result<Op, GBError> {
         // TODO: fix error
-        let (op, new_pc) =
-            Op::read_op(&mut self.mmu, self.pc).ok_or_else(|| GBError::BadCommand)?;
+        let (op, new_pc) = Op::read_op(mmu, self.pc).ok_or_else(|| GBError::BadCommand)?;
         self.pc = new_pc;
         Ok(op)
     }
 
-    pub fn execute_instruction(&mut self, instruction: Op) {
+    pub fn execute_instruction(&mut self, instruction: Op, mmu: &mut Mmu) -> u8 {
         // TODO: use _cycles
-        let (next_pc, _cycles) = match instruction {
+        let (next_pc, cycles) = match instruction {
             Op::JR(cond, rel_addr) => {
                 self.jr(cond, rel_addr) // different cycles depending on
                                         // condition
             }
             // Op::BIT(target, pos) => prefix!(target, self.bit_test, pos),
-            Op::BIT(target, pos) => prefix_test!(target, self.bit_test, pos),
+            Op::BIT(target, pos) => prefix_test!(target, self.bit_test, pos, mmu),
             Op::LD(load_type) => {
                 match load_type {
                     LoadType::Byte(dst, src) => {
@@ -215,7 +212,7 @@ impl Cpu {
                             LoadByteSource::H => self.reg.h,
                             LoadByteSource::L => self.reg.l,
                             LoadByteSource::D8(byte) => byte,
-                            LoadByteSource::HLIndirect => self.mmu.byte(self.reg.hl()),
+                            LoadByteSource::HLIndirect => mmu.byte(self.reg.hl()),
                         };
 
                         match dst {
@@ -226,9 +223,7 @@ impl Cpu {
                             LoadByteTarget::E => self.reg.e = src_value,
                             LoadByteTarget::H => self.reg.h = src_value,
                             LoadByteTarget::L => self.reg.l = src_value,
-                            LoadByteTarget::HLIndirect => {
-                                self.mmu.write_byte(self.reg.hl(), src_value)
-                            }
+                            LoadByteTarget::HLIndirect => mmu.write_byte(self.reg.hl(), src_value),
                         };
 
                         (self.pc, 8)
@@ -251,21 +246,21 @@ impl Cpu {
                     }
                     LoadType::AFromIndirect(src) => {
                         self.reg.a = match src {
-                            Indirect::BC => self.mmu.byte(self.reg.bc()),
-                            Indirect::DE => self.mmu.byte(self.reg.de()),
-                            Indirect::HL => self.mmu.byte(self.reg.hl()),
+                            Indirect::BC => mmu.byte(self.reg.bc()),
+                            Indirect::DE => mmu.byte(self.reg.de()),
+                            Indirect::HL => mmu.byte(self.reg.hl()),
                             Indirect::HLD => {
                                 let hl = self.reg.hl();
                                 self.reg.set_hl(hl.wrapping_sub(1));
-                                self.mmu.byte(hl)
+                                mmu.byte(hl)
                             }
                             Indirect::HLI => {
                                 let hl = self.reg.hl();
                                 self.reg.set_hl(hl.wrapping_add(1));
-                                self.mmu.byte(hl)
+                                mmu.byte(hl)
                             }
-                            Indirect::Word(word) => self.mmu.byte(word),
-                            Indirect::FF00PlusC => self.mmu.byte(0xFF00 + self.reg.c as u16),
+                            Indirect::Word(word) => mmu.byte(word),
+                            Indirect::FF00PlusC => mmu.byte(0xFF00 + self.reg.c as u16),
                         };
 
                         match src {
@@ -276,23 +271,21 @@ impl Cpu {
                     LoadType::IndirectFromA(dst) => {
                         let a = self.reg.a;
                         match dst {
-                            Indirect::BC => self.mmu.write_byte(self.reg.bc(), a),
-                            Indirect::DE => self.mmu.write_byte(self.reg.de(), a),
-                            Indirect::HL => self.mmu.write_byte(self.reg.hl(), a),
+                            Indirect::BC => mmu.write_byte(self.reg.bc(), a),
+                            Indirect::DE => mmu.write_byte(self.reg.de(), a),
+                            Indirect::HL => mmu.write_byte(self.reg.hl(), a),
                             Indirect::HLD => {
                                 let hl = self.reg.hl();
                                 self.reg.set_hl(hl.wrapping_sub(1));
-                                self.mmu.write_byte(hl, a);
+                                mmu.write_byte(hl, a);
                             }
                             Indirect::HLI => {
                                 let hl = self.reg.hl();
                                 self.reg.set_hl(hl.wrapping_add(1));
-                                self.mmu.write_byte(hl, a);
+                                mmu.write_byte(hl, a);
                             }
-                            Indirect::Word(word) => self.mmu.write_byte(word, a),
-                            Indirect::FF00PlusC => {
-                                self.mmu.write_byte(0xFF00 + self.reg.c as u16, a)
-                            }
+                            Indirect::Word(word) => mmu.write_byte(word, a),
+                            Indirect::FF00PlusC => mmu.write_byte(0xFF00 + self.reg.c as u16, a),
                         };
 
                         match dst {
@@ -301,11 +294,11 @@ impl Cpu {
                         }
                     }
                     LoadType::AFromIndirectFF00u8(byte) => {
-                        self.mmu.write_byte(0xFF00 + byte as u16, self.reg.a);
+                        mmu.write_byte(0xFF00 + byte as u16, self.reg.a);
                         (self.pc, 12)
                     }
                     LoadType::IndirectFF00u8FromA(byte) => {
-                        self.reg.a = self.mmu.byte(0xFF00 + byte as u16);
+                        self.reg.a = mmu.byte(0xFF00 + byte as u16);
                         (self.pc, 12)
                     }
                     LoadType::SPFromHL => {
@@ -314,18 +307,20 @@ impl Cpu {
                     }
                     LoadType::HLFromSPu8(byte) => {
                         let byte = byte as u16;
-                        self.reg.set_flag(Flag::Zero, false);
-                        self.reg.set_flag(Flag::Negative, false);
+                        self.reg.f.set(Flag::Zero, false);
+                        self.reg.f.set(Flag::Negative, false);
                         // carry from bit 3 to bit 4?
                         self.reg
-                            .set_flag(Flag::HalfCarry, (self.sp & 0x0F) + (byte & 0x0F) > 0xF0);
+                            .f
+                            .set(Flag::HalfCarry, (self.sp & 0x0F) + (byte & 0x0F) > 0xF0);
                         // carry from bit 7 to bit 8?
                         self.reg
-                            .set_flag(Flag::Carry, (self.sp & 0xFF) + (byte & 0xFF) > 0xFF);
+                            .f
+                            .set(Flag::Carry, (self.sp & 0xFF) + (byte & 0xFF) > 0xFF);
                         (self.pc, 12)
                     }
                     LoadType::IndirectFromSP(word) => {
-                        self.mmu.write_word(word, self.sp);
+                        mmu.write_word(word, self.sp);
                         (self.pc, 20)
                     }
                 }
@@ -333,7 +328,7 @@ impl Cpu {
             // Op::LD(dst, src) => self.ld(dst, src),
             // Op::LDD(dst, src) => self.ldd(dst, src),
             // Op::LDI(dst, src) => self.ldi(dst, src),
-            // // Op::NOP => {}
+            Op::NOP => (self.pc, 4),
             // // Op::STOP => {}
             // Op::RRA => {}
             // Op::RLCA => {}
@@ -354,12 +349,12 @@ impl Cpu {
                     StackTarget::DE => self.reg.de(),
                     StackTarget::HL => self.reg.hl(),
                 };
-                self.push(value);
+                self.push(value, mmu);
 
                 (self.pc, 16)
             }
             Op::POP(target) => {
-                let value = self.pop();
+                let value = self.pop(mmu);
                 match target {
                     StackTarget::AF => self.reg.set_af(value),
                     StackTarget::BC => self.reg.set_bc(value),
@@ -369,8 +364,8 @@ impl Cpu {
 
                 (self.pc, 12)
             }
-            Op::CALL(condition, addr) => self.call(condition, addr),
-            Op::RET(cond) => self.ret(cond),
+            Op::CALL(condition, addr) => self.call(condition, addr, mmu),
+            Op::RET(cond) => self.ret(cond, mmu),
             Op::INC(target) => {
                 match target {
                     IncDecTarget::A => self.reg.a = self.inc_8bit(self.reg.a),
@@ -397,9 +392,9 @@ impl Cpu {
                     }
                     IncDecTarget::HLIndirect => {
                         let addr = self.reg.hl();
-                        let value = self.mmu.byte(addr);
+                        let value = mmu.byte(addr);
                         let new_value = self.inc_8bit(value);
-                        self.mmu.write_byte(addr, new_value);
+                        mmu.write_byte(addr, new_value);
                     }
                     IncDecTarget::SP => self.sp = self.inc_16bit(self.sp),
                 }
@@ -438,9 +433,9 @@ impl Cpu {
                     }
                     IncDecTarget::HLIndirect => {
                         let addr = self.reg.hl();
-                        let value = self.mmu.byte(addr);
+                        let value = mmu.byte(addr);
                         let new_value = self.dec_8bit(value);
-                        self.mmu.write_byte(addr, new_value);
+                        mmu.write_byte(addr, new_value);
                     }
                     IncDecTarget::SP => self.sp = self.dec_16bit(self.sp),
                 }
@@ -455,20 +450,24 @@ impl Cpu {
             }
             // Op::DEC(dst) => self.dec(dst),
             // Op::LDi8(_, _) => {}
-            // Op::ADD(_, _) => {}
+            Op::ADD(target) => {
+                arithmetic!(target, self.add, mmu)
+            }
             // Op::ADDi8(_, _) => {}
             // Op::ADC(_, _) => {}
-            // Op::SUB(_, _) => {}
+            Op::SUB(target) => {
+                arithmetic!(target, self.sub, mmu)
+            }
             // Op::SBC(src) => self.sbc(src, true),
-            Op::AND(target) => arithmetic!(target, self.and),
-            Op::OR(target) => arithmetic!(target, self.or),
-            Op::XOR(target) => arithmetic!(target, self.xor),
-            Op::CP(target) => arithmetic!(target, self.cmp),
+            Op::AND(target) => arithmetic!(target, self.and, mmu),
+            Op::OR(target) => arithmetic!(target, self.or, mmu),
+            Op::XOR(target) => arithmetic!(target, self.xor, mmu),
+            Op::CP(target) => arithmetic!(target, self.cmp, mmu),
             // Op::RST(_) => {}
             // Op::RLC(_) => {}
             // Op::RRC(_) => {}
-            Op::RL(target) => prefix!(target, self.rot_left_through_carry_zero_flag),
-            Op::RR(target) => prefix!(target, self.rot_right_through_carry_zero_flag),
+            Op::RL(target) => prefix!(target, self.rot_left_through_carry_zero_flag, mmu),
+            Op::RR(target) => prefix!(target, self.rot_right_through_carry_zero_flag, mmu),
             Op::RLA => {
                 self.reg.a = self.rot_left_through_carry_no_zero_flag(self.reg.a);
                 (self.pc, 4)
@@ -487,59 +486,88 @@ impl Cpu {
         };
 
         self.pc = next_pc;
+        cycles
     }
 
     // TODO: test
     fn cmp(&mut self, value: u8) {
-        self.reg.set_flag(Flag::Zero, self.reg.a == value);
-        self.reg.set_flag(Flag::Negative, true);
+        self.reg.f.set(Flag::Zero, self.reg.a == value);
+        self.reg.f.set(Flag::Negative, true);
         // cmp is done by subtracting value from A and checking if it equals zero
         // so if value is greater than A we will end up with something less than zero, thus
         // carrying
         self.reg
-            .set_flag(Flag::HalfCarry, (self.reg.a & 0x0F) < (value & 0x0F));
-        self.reg.set_flag(Flag::Carry, self.reg.a < value);
+            .f
+            .set(Flag::HalfCarry, (self.reg.a & 0x0F) < (value & 0x0F));
+        self.reg.f.set(Flag::Carry, self.reg.a < value);
     }
 
     // TODO: test
     fn xor(&mut self, value: u8) {
         self.reg.a = self.reg.a ^ value;
-        self.reg.set_flag(Flag::Zero, self.reg.a == 0);
-        self.reg.set_flag(Flag::Negative, false);
-        self.reg.set_flag(Flag::HalfCarry, false);
-        self.reg.set_flag(Flag::Carry, false);
+        self.reg.f.set(Flag::Zero, self.reg.a == 0);
+        self.reg.f.set(Flag::Negative, false);
+        self.reg.f.set(Flag::HalfCarry, false);
+        self.reg.f.set(Flag::Carry, false);
     }
 
     // TODO: test
     fn or(&mut self, value: u8) {
         self.reg.a = self.reg.a | value;
-        self.reg.set_flag(Flag::Zero, self.reg.a == 0);
-        self.reg.set_flag(Flag::Negative, false);
-        self.reg.set_flag(Flag::HalfCarry, false);
-        self.reg.set_flag(Flag::Carry, false);
+        self.reg.f.set(Flag::Zero, self.reg.a == 0);
+        self.reg.f.set(Flag::Negative, false);
+        self.reg.f.set(Flag::HalfCarry, false);
+        self.reg.f.set(Flag::Carry, false);
     }
 
     // TODO: test
     fn and(&mut self, value: u8) {
         self.reg.a = self.reg.a & value;
-        self.reg.set_flag(Flag::Zero, self.reg.a == 0);
-        self.reg.set_flag(Flag::Negative, false);
-        self.reg.set_flag(Flag::HalfCarry, true);
-        self.reg.set_flag(Flag::Carry, false);
+        self.reg.f.set(Flag::Zero, self.reg.a == 0);
+        self.reg.f.set(Flag::Negative, false);
+        self.reg.f.set(Flag::HalfCarry, true);
+        self.reg.f.set(Flag::Carry, false);
+    }
+
+    // TODO: test
+    fn add(&mut self, value: u8) {
+        let old_a = self.reg.a;
+        let result = self.reg.a.wrapping_add(value);
+
+        self.reg.f.set(Flag::Zero, result == 0);
+        self.reg.f.set(Flag::Negative, false);
+        self.reg
+            .f
+            .set(Flag::HalfCarry, (old_a & 0x0F) < (value & 0x0F));
+        self.reg.f.set(Flag::Carry, old_a < value);
+    }
+
+    // TODO: test
+    fn sub(&mut self, value: u8) {
+        let old_a = self.reg.a;
+        let result = self.reg.a.wrapping_sub(value);
+
+        self.reg.f.set(Flag::Zero, result == 0);
+        self.reg.f.set(Flag::Negative, true);
+        self.reg
+            .f
+            .set(Flag::HalfCarry, ((old_a & 0x0F) + (value & 0x0F)) > 0x0F);
+        self.reg
+            .f
+            .set(Flag::Carry, (old_a as u16 + value as u16) > 0xFF);
     }
 
     // TODO: test
     fn bit_test(&mut self, value: u8, pos: u8) {
         let result = (value >> pos) & 0b1;
-        self.reg.set_flag(Flag::Zero, result == 0);
-        self.reg.set_flag(Flag::Negative, false);
-        self.reg.set_flag(Flag::HalfCarry, true);
+        self.reg.f.set(Flag::Zero, result == 0);
+        self.reg.f.set(Flag::Negative, false);
+        // self.reg.f.set(Flag::HalfCarry, true);
     }
 
     // TODO: test
     fn jr(&mut self, cond: Condition, rel_addr: u8) -> (u16, u8) {
-        let flags: FlagsRegister = self.reg.f.into();
-        if cond.is_satisfied(flags) {
+        if cond.is_satisfied(&self.reg.f) {
             // let relative_offset = self.peek_byte() as i8;
             // relative offset will be cast to u16, so e.g. -5 will become a large number and
             // wrapping_add will make sure that pc wraps to zero and thus negative relative offsets will work
@@ -554,10 +582,9 @@ impl Cpu {
     // TODO: test
     fn inc_8bit(&mut self, value: u8) -> u8 {
         let result = value.wrapping_add(1);
-        self.reg.set_flag(Flag::Zero, result == 0);
-        self.reg.set_flag(Flag::Negative, false);
-        self.reg
-            .set_flag(Flag::HalfCarry, (value & 0x0F) + 1 > 0x0F);
+        self.reg.f.set(Flag::Zero, result == 0);
+        self.reg.f.set(Flag::Negative, false);
+        self.reg.f.set(Flag::HalfCarry, (value & 0x0F) + 1 > 0x0F);
         result
     }
 
@@ -569,9 +596,9 @@ impl Cpu {
     // TODO: test
     fn dec_8bit(&mut self, value: u8) -> u8 {
         let result = value.wrapping_sub(1);
-        self.reg.set_flag(Flag::Zero, result == 0);
-        self.reg.set_flag(Flag::Negative, true);
-        self.reg.set_flag(Flag::HalfCarry, (value & 0x0F) == 0x0);
+        self.reg.f.set(Flag::Zero, result == 0);
+        self.reg.f.set(Flag::Negative, true);
+        self.reg.f.set(Flag::HalfCarry, (value & 0x0F) == 0x0);
         result
     }
 
@@ -581,10 +608,9 @@ impl Cpu {
     }
 
     // TODO: test
-    fn call(&mut self, cond: Condition, addr: u16) -> (u16, u8) {
-        let flags: FlagsRegister = self.reg.f.into();
-        if cond.is_satisfied(flags) {
-            self.push(self.pc);
+    fn call(&mut self, cond: Condition, addr: u16, mmu: &mut Mmu) -> (u16, u8) {
+        if cond.is_satisfied(&self.reg.f) {
+            self.push(self.pc, mmu);
             (addr, 24)
         } else {
             (self.pc, 12)
@@ -592,14 +618,14 @@ impl Cpu {
     }
 
     // TODO: test
-    fn push(&mut self, value: u16) {
+    fn push(&mut self, value: u16, mmu: &mut Mmu) {
         self.sp = self.sp.wrapping_sub(2);
-        self.mmu.write_word(self.sp, value);
+        mmu.write_word(self.sp, value);
     }
 
     // TODO: test
-    fn pop(&mut self) -> u16 {
-        let value = self.mmu.word(self.sp);
+    fn pop(&mut self, mmu: &mut Mmu) -> u16 {
+        let value = mmu.word(self.sp);
         self.sp += 2;
         value
     }
@@ -614,16 +640,16 @@ impl Cpu {
 
     // TODO: test
     fn rot_left_through_carry(&mut self, value: u8, set_zero: bool) -> u8 {
-        let flags: FlagsRegister = self.reg.f.into();
-        let carry_bit = if flags.c { 1 } else { 0 };
+        let is_carry = self.reg.f.get(Flag::Carry);
+        let carry_bit = if is_carry { 1 } else { 0 };
         // shift everything one step to the left, and set whatever carry was set to to the
         // least significant bit
         let next_value = (value << 1) | carry_bit;
-        self.reg.set_flag(Flag::Zero, set_zero && next_value == 0);
-        self.reg.set_flag(Flag::Negative, false);
-        self.reg.set_flag(Flag::HalfCarry, false);
+        self.reg.f.set(Flag::Zero, set_zero && next_value == 0);
+        self.reg.f.set(Flag::Negative, false);
+        self.reg.f.set(Flag::HalfCarry, false);
         // shift MSB into carry flag
-        self.reg.set_flag(Flag::Carry, value & 0x80 == 0x80);
+        self.reg.f.set(Flag::Carry, value & 0x80 == 0x80);
         next_value
     }
 
@@ -637,16 +663,16 @@ impl Cpu {
 
     // TODO: test
     fn rot_right_through_carry(&mut self, value: u8, set_zero: bool) -> u8 {
-        let flags: FlagsRegister = self.reg.f.into();
-        let carry_bit = if flags.c { 1 } else { 0 } << 7;
+        let is_carry = self.reg.f.get(Flag::Carry);
+        let carry_bit = if is_carry { 1 } else { 0 } << 7;
         // shift everything one step to the right, and set whatever carry was set to to the
         // most significant bit
         let next_value = carry_bit | (value >> 1);
-        self.reg.set_flag(Flag::Zero, set_zero && next_value == 0);
-        self.reg.set_flag(Flag::Negative, false);
-        self.reg.set_flag(Flag::HalfCarry, false);
+        self.reg.f.set(Flag::Zero, set_zero && next_value == 0);
+        self.reg.f.set(Flag::Negative, false);
+        self.reg.f.set(Flag::HalfCarry, false);
         // shift LSB into carry flag
-        self.reg.set_flag(Flag::Carry, value & 0b1 == 0b1);
+        self.reg.f.set(Flag::Carry, value & 0b1 == 0b1);
         next_value
     }
 
@@ -661,26 +687,25 @@ impl Cpu {
     //     let a = self.reg.a;
     //     let result = a.wrapping_sub(src_value).wrapping_sub(carry);
 
-    //     self.reg.set_flag(Flag::Zero, result == 0);
-    //     self.reg.set_flag(Flag::Negative, true);
+    //     self.reg.f.set(Flag::Zero, result == 0);
+    //     self.reg.f.set(Flag::Negative, true);
     //     self.reg
-    //         .set_flag(Flag::HalfCarry, (a & 0x0F) + (src_value & 0x0F) > 0x0F);
+    //         .f.set(Flag::HalfCarry, (a & 0x0F) + (src_value & 0x0F) > 0x0F);
     //     self.reg
-    //         .set_flag(Flag::Carry, (a as u16) < (src_value as u16) + carry as u16);
+    //         .f.set(Flag::Carry, (a as u16) < (src_value as u16) + carry as u16);
     //     self.reg.a = result;
 
     //     8
     // }
 
-    fn ret(&mut self, cond: Condition) -> (u16, u8) {
-        let flags: FlagsRegister = self.reg.f.into();
-        if cond.is_satisfied(flags) {
+    fn ret(&mut self, cond: Condition, mmu: &mut Mmu) -> (u16, u8) {
+        if cond.is_satisfied(&self.reg.f) {
             let cycles = match cond {
                 Condition::None => 16,
                 _ => 20,
             };
 
-            (self.pop(), cycles) // pop return address
+            (self.pop(mmu) + 1, cycles) // pop return address
         } else {
             (self.pc, 8)
         }
@@ -711,11 +736,11 @@ impl fmt::Display for Cpu {
             self.reg.bc(),
             self.reg.de(),
             self.reg.hl(),
-            self.reg.flag(Flag::Zero),
-            self.reg.flag(Flag::Negative),
-            self.reg.flag(Flag::HalfCarry),
-            self.reg.flag(Flag::Carry),
-            self.reg.f,
+            self.reg.f.get(Flag::Zero),
+            self.reg.f.get(Flag::Negative),
+            self.reg.f.get(Flag::HalfCarry),
+            self.reg.f.get(Flag::Carry),
+            self.reg.f.0,
         )
     }
 }

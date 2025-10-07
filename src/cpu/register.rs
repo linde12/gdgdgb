@@ -6,22 +6,34 @@ pub enum Flag {
     Carry,
 }
 
-#[derive(Debug)]
-pub struct FlagsRegister {
-    pub z: bool,
-    pub n: bool,
-    pub h: bool,
-    pub c: bool,
-}
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Flags(pub u8);
 
-impl From<u8> for FlagsRegister {
-    fn from(flags: u8) -> Self {
-        let z = flags >> 7 == 1;
-        let n = (flags & 0b0100_0000) >> 6 == 1;
-        let h = (flags & 0b0010_0000) >> 5 == 1;
-        let c = (flags & 0b0001_0000) >> 4 == 1;
+impl Flags {
+    /// Set a specific flag to true or false
+    pub fn set(&mut self, flag: Flag, value: bool) {
+        let mask = match flag {
+            Flag::Zero => 0b1000_0000,
+            Flag::Negative => 0b0100_0000,
+            Flag::HalfCarry => 0b0010_0000,
+            Flag::Carry => 0b0001_0000,
+        };
+        if value {
+            self.0 |= mask;
+        } else {
+            self.0 &= !mask;
+        }
+    }
 
-        FlagsRegister { z, n, h, c }
+    /// Read a specific flag
+    pub fn get(&self, flag: Flag) -> bool {
+        let mask = match flag {
+            Flag::Zero => 0b1000_0000,
+            Flag::Negative => 0b0100_0000,
+            Flag::HalfCarry => 0b0010_0000,
+            Flag::Carry => 0b0001_0000,
+        };
+        (self.0 & mask) != 0
     }
 }
 
@@ -50,7 +62,7 @@ pub struct Register {
     pub c: u8,
     pub d: u8,
     pub e: u8,
-    pub f: u8,
+    pub f: Flags,
     pub h: u8,
     pub l: u8,
 }
@@ -58,46 +70,27 @@ pub struct Register {
 impl Register {
     pub fn new() -> Self {
         Register {
-            f: 0b1000_0000,
+            f: Flags(0b0000_0000),
             ..Default::default()
         }
     }
 
-    reg!(af, a, f);
+    pub fn af(&self) -> u16 {
+        ((self.a as u16) << 8) | (self.f.0 as u16)
+    }
+
+    pub fn set_af(&mut self, value: u16) {
+        let [hi, lo] = value.to_be_bytes();
+        self.a = hi;
+        self.f.0 = lo & 0b1111_0000; // lower nibble of F is always 0
+    }
+
     reg!(bc, b, c);
     reg!(de, d, e);
     reg!(hl, h, l);
-    set_reg!(set_af, a, f);
     set_reg!(set_bc, b, c);
     set_reg!(set_de, d, e);
     set_reg!(set_hl, h, l);
-
-    pub fn set_flag(&mut self, flag: Flag, value: bool) {
-        if value == true {
-            match flag {
-                Flag::Zero => self.f |= 0b1000_0000,
-                Flag::Negative => self.f |= 0b0100_0000,
-                Flag::HalfCarry => self.f |= 0b0010_0000,
-                Flag::Carry => self.f |= 0b0001_0000,
-            }
-        } else {
-            match flag {
-                Flag::Zero => self.f &= 0b0111_1111,
-                Flag::Negative => self.f &= 0b1011_1111,
-                Flag::HalfCarry => self.f &= 0b1101_1111,
-                Flag::Carry => self.f &= 0b1110_1111,
-            }
-        }
-    }
-    pub fn flag(&self, flag: Flag) -> bool {
-        let flags: FlagsRegister = self.f.into();
-        match flag {
-            Flag::Zero => flags.z,
-            Flag::Negative => flags.n,
-            Flag::HalfCarry => flags.h,
-            Flag::Carry => flags.c,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -107,45 +100,42 @@ mod tests {
     #[test]
     fn set_flag() {
         let regs = Register::new();
-        assert!(regs.f == 0);
+        assert_eq!(regs.f.0, 0);
 
         let mut regs = Register::new();
-        regs.set_flag(Flag::Zero, true);
-        assert!(regs.f == 0x80);
+        regs.f.set(Flag::Zero, true);
+        assert_eq!(regs.f.0, 0x80);
 
         let mut regs = Register::new();
-        regs.set_flag(Flag::Negative, true);
-        assert!(regs.f == 0x40);
+        regs.f.set(Flag::Negative, true);
+        assert_eq!(regs.f.0, 0x40);
+        // assert!(regs.f.0 == 0x40);
 
         let mut regs = Register::new();
-        regs.set_flag(Flag::HalfCarry, true);
-        assert!(regs.f == 0x20);
+        regs.f.set(Flag::HalfCarry, true);
+        assert_eq!(regs.f.0, 0x20);
 
         let mut regs = Register::new();
-        regs.set_flag(Flag::Carry, true);
-        assert!(regs.f == 0x10);
+        regs.f.set(Flag::Carry, true);
+        assert_eq!(regs.f.0, 0x10);
     }
 
     #[test]
     fn get_flag() {
         let mut regs = Register::new();
-        regs.set_flag(Flag::Zero, true);
-        let flags: FlagsRegister = regs.f.into();
-        assert!(flags.z == true);
+        regs.f.set(Flag::Zero, true);
+        assert!(regs.f.get(Flag::Zero) == true);
 
         let mut regs = Register::new();
-        regs.set_flag(Flag::Negative, true);
-        let flags: FlagsRegister = regs.f.into();
-        assert!(flags.n == true);
+        regs.f.set(Flag::Negative, true);
+        assert!(regs.f.get(Flag::Negative) == true);
 
         let mut regs = Register::new();
-        regs.set_flag(Flag::HalfCarry, true);
-        let flags: FlagsRegister = regs.f.into();
-        assert!(flags.h == true);
+        regs.f.set(Flag::HalfCarry, true);
+        assert!(regs.f.get(Flag::HalfCarry) == true);
 
         let mut regs = Register::new();
-        regs.set_flag(Flag::Carry, true);
-        let flags: FlagsRegister = regs.f.into();
-        assert!(flags.c == true);
+        regs.f.set(Flag::Carry, true);
+        assert!(regs.f.get(Flag::Carry) == true);
     }
 }

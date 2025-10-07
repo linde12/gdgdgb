@@ -1,6 +1,6 @@
 use crate::mmu::Mmu;
 
-use super::register::FlagsRegister;
+use super::register::{Flag, Flags};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum LoadType {
@@ -132,12 +132,12 @@ pub enum Condition {
 
 // TODO: Impl Rust traits From or Into instead?
 impl Condition {
-    pub fn is_satisfied(&self, flags: FlagsRegister) -> bool {
+    pub fn is_satisfied(&self, flags: &Flags) -> bool {
         match self {
-            Condition::NZ => !flags.z,
-            Condition::NC => !flags.c,
-            Condition::Z => flags.z,
-            Condition::C => flags.c,
+            Condition::NZ => flags.get(Flag::Zero) == true,
+            Condition::NC => flags.get(Flag::Carry) == true,
+            Condition::Z => flags.get(Flag::Zero) == false,
+            Condition::C => flags.get(Flag::Carry) == false,
             Condition::None => true,
         }
     }

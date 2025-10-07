@@ -7,9 +7,11 @@ use std::io::stdin;
 mod cpu;
 mod error;
 mod mmu;
+mod ppu;
 
 use crate::cpu::Cpu;
 use crate::mmu::Mmu;
+use crate::ppu::PPU;
 use error::GBError;
 
 fn main() -> anyhow::Result<()> {
@@ -21,12 +23,13 @@ fn main() -> anyhow::Result<()> {
 
     let mut mmu = Mmu::new();
     mmu.load_rom(rom);
-    let mut cpu = Cpu::new(mmu);
+    let mut cpu = Cpu::new();
+    let mut ppu = PPU::new(&mut mmu);
 
     match cmd.as_str() {
         "d" | "disassemble" | "disasm" => loop {
             let pc = cpu.pc;
-            let op = cpu.read_instruction()?;
+            let op = cpu.read_instruction(&mut mmu)?;
             println!("0x{:04X}\t{:02X?}", pc, op);
             // cpu.execute_instruction(op);
 
@@ -41,9 +44,10 @@ fn main() -> anyhow::Result<()> {
         },
         "r" | "run" => loop {
             let pc = cpu.pc;
-            let op = cpu.read_instruction()?;
+            let op = cpu.read_instruction(&mut mmu)?;
             println!("0x{:04X}\t{:02X?}", pc, op);
-            cpu.execute_instruction(op);
+            let consumed_cycles = cpu.execute_instruction(op, &mut mmu);
+            ppu.step(consumed_cycles, &mut mmu);
         },
         _ => Err(GBError::BadCommand.into()),
     }
