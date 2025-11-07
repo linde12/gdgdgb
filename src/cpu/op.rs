@@ -134,10 +134,15 @@ pub enum Condition {
 impl Condition {
     pub fn is_satisfied(&self, flags: &Flags) -> bool {
         match self {
-            Condition::NZ => flags.get(Flag::Zero) == true,
-            Condition::NC => flags.get(Flag::Carry) == true,
-            Condition::Z => flags.get(Flag::Zero) == false,
-            Condition::C => flags.get(Flag::Carry) == false,
+            // jump if zero flag is not set
+            Condition::NZ => flags.get(Flag::Zero) == false,
+            // jump if carry flag is not set
+            Condition::NC => flags.get(Flag::Carry) == false,
+            // jump if zero flag is set
+            Condition::Z => flags.get(Flag::Zero) == true,
+            // jump if carry flag is set
+            Condition::C => flags.get(Flag::Carry) == true,
+            // unconditional
             Condition::None => true,
         }
     }
