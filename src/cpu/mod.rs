@@ -4,7 +4,7 @@ use crate::error::GBError;
 use crate::mmu::Mmu;
 use op::*;
 use register::{Flag, Register};
-use std::fmt;
+use std::fmt::{self, Display};
 
 /// Performs ALU operation on the passed `ArithmeticTarget`. The second parameter specifies the
 /// operation to be performed.
@@ -169,6 +169,7 @@ macro_rules! prefix {
     }};
 }
 
+#[derive(Debug)]
 pub struct Cpu {
     pub reg: Register,
     pub pc: u16,
@@ -182,6 +183,10 @@ impl Cpu {
             pc: 0,
             sp: 0,
         }
+    }
+
+    pub fn print_state(&self) {
+        println!("{}", self);
     }
 
     pub fn read_instruction(&mut self, mmu: &mut Mmu) -> Result<Op, GBError> {
@@ -294,11 +299,13 @@ impl Cpu {
                         }
                     }
                     LoadType::AFromIndirectFF00u8(byte) => {
-                        mmu.write_byte(0xFF00 + byte as u16, self.reg.a);
+                        let value = mmu.byte(0xFF00 + byte as u16);
+
+                        self.reg.a = value;
                         (self.pc, 12)
                     }
                     LoadType::IndirectFF00u8FromA(byte) => {
-                        self.reg.a = mmu.byte(0xFF00 + byte as u16);
+                        mmu.write_byte(0xFF00 + byte as u16, self.reg.a);
                         (self.pc, 12)
                     }
                     LoadType::SPFromHL => {
@@ -329,6 +336,13 @@ impl Cpu {
             // Op::LDD(dst, src) => self.ldd(dst, src),
             // Op::LDI(dst, src) => self.ldi(dst, src),
             Op::NOP => (self.pc, 4),
+            Op::JP(cond, addr) => {
+                if cond.is_satisfied(&self.reg.f) {
+                    (addr, 16)
+                } else {
+                    (self.pc, 12)
+                }
+            }
             // // Op::STOP => {}
             // Op::RRA => {}
             // Op::RLCA => {}
@@ -491,6 +505,9 @@ impl Cpu {
 
     // TODO: test
     fn cmp(&mut self, value: u8) {
+        // a == 91
+        // value == 90
+
         self.reg.f.set(Flag::Zero, self.reg.a == value);
         self.reg.f.set(Flag::Negative, true);
         // cmp is done by subtracting value from A and checking if it equals zero
@@ -499,6 +516,7 @@ impl Cpu {
         self.reg
             .f
             .set(Flag::HalfCarry, (self.reg.a & 0x0F) < (value & 0x0F));
+
         self.reg.f.set(Flag::Carry, self.reg.a < value);
     }
 
@@ -533,19 +551,21 @@ impl Cpu {
     fn add(&mut self, value: u8) {
         let old_a = self.reg.a;
         let result = self.reg.a.wrapping_add(value);
+        self.reg.a = result;
 
         self.reg.f.set(Flag::Zero, result == 0);
         self.reg.f.set(Flag::Negative, false);
         self.reg
             .f
-            .set(Flag::HalfCarry, (old_a & 0x0F) < (value & 0x0F));
-        self.reg.f.set(Flag::Carry, old_a < value);
+            .set(Flag::HalfCarry, (result & 0x0F) < (old_a & 0x0F));
+        self.reg.f.set(Flag::Carry, result < old_a);
     }
 
     // TODO: test
     fn sub(&mut self, value: u8) {
         let old_a = self.reg.a;
         let result = self.reg.a.wrapping_sub(value);
+        self.reg.a = result;
 
         self.reg.f.set(Flag::Zero, result == 0);
         self.reg.f.set(Flag::Negative, true);
@@ -572,7 +592,6 @@ impl Cpu {
             // relative offset will be cast to u16, so e.g. -5 will become a large number and
             // wrapping_add will make sure that pc wraps to zero and thus negative relative offsets will work
             let next_pc = self.pc.wrapping_add(rel_addr as i8 as u16);
-            println!("next pc will be 0x{:04X}", next_pc);
             (next_pc, 12)
         } else {
             (self.pc, 8)
@@ -584,7 +603,8 @@ impl Cpu {
         let result = value.wrapping_add(1);
         self.reg.f.set(Flag::Zero, result == 0);
         self.reg.f.set(Flag::Negative, false);
-        self.reg.f.set(Flag::HalfCarry, (value & 0x0F) + 1 > 0x0F);
+        self.reg.f.set(Flag::HalfCarry, (value & 0x0F) == 0x0F); // check if there was a carry from
+                                                                 // bit 3 to bit 4
         result
     }
 
@@ -640,17 +660,25 @@ impl Cpu {
 
     // TODO: test
     fn rot_left_through_carry(&mut self, value: u8, set_zero: bool) -> u8 {
-        let is_carry = self.reg.f.get(Flag::Carry);
-        let carry_bit = if is_carry { 1 } else { 0 };
-        // shift everything one step to the left, and set whatever carry was set to to the
-        // least significant bit
-        let next_value = (value << 1) | carry_bit;
-        self.reg.f.set(Flag::Zero, set_zero && next_value == 0);
+        let c = self.reg.f.get(Flag::Carry) as u8;
+        let msb = (value & 0b1000_0000) >> 7;
+        let result = (value << 1) | c;
+        self.reg.f.set(Flag::Carry, msb == 1);
+        self.reg.f.set(Flag::Zero, result == 0);
         self.reg.f.set(Flag::Negative, false);
         self.reg.f.set(Flag::HalfCarry, false);
-        // shift MSB into carry flag
-        self.reg.f.set(Flag::Carry, value & 0x80 == 0x80);
-        next_value
+        result
+        // let is_carry = self.reg.f.get(Flag::Carry);
+        // let carry_bit = if is_carry { 1 } else { 0 };
+        // // shift everything one step to the left, and set whatever carry was set to to the
+        // // least significant bit
+        // let next_value = (value << 1) | carry_bit;
+        // self.reg.f.set(Flag::Zero, set_zero && next_value == 0);
+        // self.reg.f.set(Flag::Negative, false);
+        // self.reg.f.set(Flag::HalfCarry, false);
+        // // shift MSB into carry flag
+        // self.reg.f.set(Flag::Carry, value & 0x80 == 0x80);
+        // next_value
     }
 
     fn rot_right_through_carry_zero_flag(&mut self, value: u8) -> u8 {
@@ -717,12 +745,12 @@ impl fmt::Display for Cpu {
         write!(
             f,
             concat!(
-                "PC: 0x{:04X}\n",
-                "SP: 0x{:04X}\n",
                 "AF: 0x{:04X}\n",
                 "BC: 0x{:04X}\n",
                 "DE: 0x{:04X}\n",
                 "HL: 0x{:04X}\n",
+                "SP: 0x{:04X}\n",
+                "PC: 0x{:04X}\n",
                 "------------\n",
                 "Z: {}\n",
                 "N: {}\n",
@@ -730,12 +758,12 @@ impl fmt::Display for Cpu {
                 "C: {}\n",
                 "F: {:08b}",
             ),
-            self.pc,
-            self.sp,
             self.reg.af(),
             self.reg.bc(),
             self.reg.de(),
             self.reg.hl(),
+            self.sp,
+            self.pc,
             self.reg.f.get(Flag::Zero),
             self.reg.f.get(Flag::Negative),
             self.reg.f.get(Flag::HalfCarry),
