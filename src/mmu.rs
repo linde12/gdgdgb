@@ -10,6 +10,16 @@ pub struct Mmu {
     io: [u8; 0x80],        // "Object Attribute Memory" or sprite memory, sprites are stored here
     hram: [u8; 0x7F],      // "High RAM", fast ram on the gameboy(?)
     ie: u8,                // interrupt enable register
+    if_: u8,               // interrupt flag register
+}
+
+#[repr(u8)]
+pub enum Interrupt {
+    VBlank = 0,
+    LCDStat = 1,
+    Timer = 2,
+    Serial = 3,
+    Joypad = 4,
 }
 
 impl Mmu {
@@ -23,6 +33,7 @@ impl Mmu {
             io: [0u8; 0x80],
             hram: [0u8; 0x7F],
             ie: 0,
+            if_: 0,
         }
     }
 
@@ -31,17 +42,18 @@ impl Mmu {
 
         match index {
             0x0000..=0x00FF => {
-                // if self.dmg_rom_enabled() {
-                //     BOOT_ROM[index]
-                // } else {
-                self.rom[index]
-                // }
+                if self.dmg_rom_enabled() {
+                    BOOT_ROM[index]
+                } else {
+                    self.rom[index]
+                }
             }
             0x0100..=0x7FFF => self.rom[index],
             0x8000..=0x9FFF => self.vram[index - 0x8000],
             0xA000..=0xBFFF => self.ext_ram[index - 0xA000],
             0xC000..=0xDFFF => self.ram[index - 0xC000],
             0xFE00..=0xFE9F => self.oam[index - 0xFE00],
+            0xFF0F => self.if_,
             0xFF00..=0xFF7F => self.io[index - 0xFF00],
             0xFF80..=0xFFFE => self.hram[index - 0xFF80],
             0xFFFF => self.ie,
@@ -76,6 +88,10 @@ impl Mmu {
         let [high, low] = w.to_be_bytes();
         self.write_byte(index, low);
         self.write_byte(index + 1, high);
+    }
+
+    pub fn request_interrupt(&mut self, interrupt: Interrupt) {
+        self.if_ |= 1 << (interrupt as u8);
     }
 
     pub fn load_rom(&mut self, rom: Vec<u8>) {
