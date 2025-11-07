@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 #[derive(Debug, Copy, Clone)]
 pub enum Flag {
     Zero,
@@ -37,6 +39,19 @@ impl Flags {
     }
 }
 
+impl Display for Flags {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Z:{} N:{} H:{} C:{}",
+            self.get(Flag::Zero) as bool,
+            self.get(Flag::Negative) as bool,
+            self.get(Flag::HalfCarry) as bool,
+            self.get(Flag::Carry) as bool
+        )
+    }
+}
+
 macro_rules! reg {
     ($name: ident, $reg1: ident, $reg2: ident) => {
         pub fn $name(&self) -> u16 {
@@ -65,6 +80,19 @@ pub struct Register {
     pub f: Flags,
     pub h: u8,
     pub l: u8,
+}
+
+impl Display for Register {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "AF: {:04X}  BC: {:04X}  DE: {:04X}  HL: {:04X}",
+            self.af(),
+            self.bc(),
+            self.de(),
+            self.hl()
+        )
+    }
 }
 
 impl Register {
