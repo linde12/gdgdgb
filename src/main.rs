@@ -31,6 +31,7 @@ fn main() -> anyhow::Result<()> {
     let mut cpu = Cpu::new();
 
     let ctx = sdl2::init().unwrap();
+    let mut event_pump = ctx.event_pump().unwrap();
     let video_subsystem = ctx.video().unwrap();
     let window = video_subsystem
         .window("gdgdgb", (XRES * SCALE) as u32, (YRES * SCALE) as u32)
@@ -71,6 +72,12 @@ fn main() -> anyhow::Result<()> {
             ppu.step(consumed_cycles, &mut mmu);
 
             if ppu.take_frame_ready() {
+                for event in event_pump.poll_iter() {
+                    match event {
+                        sdl2::event::Event::Quit { .. } => return Ok(()),
+                        _ => {}
+                    }
+                }
                 let elapsed = last_frame.elapsed();
                 if elapsed < fps_target {
                     sleep(fps_target - elapsed);
