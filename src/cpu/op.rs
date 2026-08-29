@@ -651,34 +651,30 @@ impl Op {
 
             0xC3 => {
                 let op = Op::JP(Condition::None, mmu.word(pc + 1));
-                pc += 1;
+                pc += 2;
                 Some(op)
             }
             0xC2 => {
                 let op = Op::JP(Condition::NZ, mmu.word(pc + 1));
-                pc += 1;
+                pc += 2;
                 Some(op)
             }
             0xD2 => {
                 let op = Op::JP(Condition::NC, mmu.word(pc + 1));
-                pc += 1;
+                pc += 2;
                 Some(op)
             }
             0xCA => {
                 let op = Op::JP(Condition::Z, mmu.word(pc + 1));
-                pc += 1;
+                pc += 2;
                 Some(op)
             }
             0xDA => {
                 let op = Op::JP(Condition::C, mmu.word(pc + 1));
-                pc += 1;
+                pc += 2;
                 Some(op)
             }
-            0xE9 => {
-                let op = Op::JPHLIndirect;
-                pc += 1;
-                Some(op)
-            }
+            0xE9 => Some(Op::JPHLIndirect),
 
             0x18 => {
                 let op = Op::JR(Condition::None, mmu.byte(pc + 1));
@@ -708,27 +704,27 @@ impl Op {
 
             0xCD => {
                 let op = Op::CALL(Condition::None, mmu.word(pc + 1));
-                pc += 1;
+                pc += 2;
                 Some(op)
             }
             0xC4 => {
                 let op = Op::CALL(Condition::NZ, mmu.word(pc + 1));
-                pc += 1;
+                pc += 2;
                 Some(op)
             }
             0xD4 => {
                 let op = Op::CALL(Condition::NC, mmu.word(pc + 1));
-                pc += 1;
+                pc += 2;
                 Some(op)
             }
             0xCC => {
                 let op = Op::CALL(Condition::Z, mmu.word(pc + 1));
-                pc += 1;
+                pc += 2;
                 Some(op)
             }
             0xDC => {
                 let op = Op::CALL(Condition::C, mmu.word(pc + 1));
-                pc += 1;
+                pc += 2;
                 Some(op)
             }
 

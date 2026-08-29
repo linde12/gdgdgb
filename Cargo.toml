@@ -8,4 +8,5 @@ edition = "2018"
 
 [dependencies]
 anyhow = "*"
+sdl2 = "0.38.0"
 thiserror = "*"

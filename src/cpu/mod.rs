@@ -111,8 +111,8 @@ macro_rules! prefix {
             }
             PrefixTarget::HLIndirect => {
                 let value = $mmu.byte($self.reg.hl());
-                $self.$fn(value);
-                $mmu.write_byte($self.reg.hl(), value);
+                let new_value = $self.$fn(value);
+                $mmu.write_byte($self.reg.hl(), new_value);
             }
         };
 
@@ -555,10 +555,12 @@ impl Cpu {
 
         self.reg.f.set(Flag::Zero, result == 0);
         self.reg.f.set(Flag::Negative, false);
-        self.reg
-            .f
-            .set(Flag::HalfCarry, (result & 0x0F) < (old_a & 0x0F));
-        self.reg.f.set(Flag::Carry, result < old_a);
+
+        let half_carry = ((old_a & 0x0F) + (value & 0x0F)) > 0x0F;
+        self.reg.f.set(Flag::HalfCarry, half_carry);
+
+        let carry = (old_a as u16 + value as u16) > 0xFF;
+        self.reg.f.set(Flag::Carry, carry);
     }
 
     // TODO: test
@@ -655,7 +657,7 @@ impl Cpu {
     }
 
     fn rot_left_through_carry_no_zero_flag(&mut self, value: u8) -> u8 {
-        self.rot_left_through_carry(value, true)
+        self.rot_left_through_carry(value, false)
     }
 
     // TODO: test
@@ -664,21 +666,10 @@ impl Cpu {
         let msb = (value & 0b1000_0000) >> 7;
         let result = (value << 1) | c;
         self.reg.f.set(Flag::Carry, msb == 1);
-        self.reg.f.set(Flag::Zero, result == 0);
+        self.reg.f.set(Flag::Zero, set_zero && result == 0);
         self.reg.f.set(Flag::Negative, false);
         self.reg.f.set(Flag::HalfCarry, false);
         result
-        // let is_carry = self.reg.f.get(Flag::Carry);
-        // let carry_bit = if is_carry { 1 } else { 0 };
-        // // shift everything one step to the left, and set whatever carry was set to to the
-        // // least significant bit
-        // let next_value = (value << 1) | carry_bit;
-        // self.reg.f.set(Flag::Zero, set_zero && next_value == 0);
-        // self.reg.f.set(Flag::Negative, false);
-        // self.reg.f.set(Flag::HalfCarry, false);
-        // // shift MSB into carry flag
-        // self.reg.f.set(Flag::Carry, value & 0x80 == 0x80);
-        // next_value
     }
 
     fn rot_right_through_carry_zero_flag(&mut self, value: u8) -> u8 {
@@ -733,7 +724,7 @@ impl Cpu {
                 _ => 20,
             };
 
-            (self.pop(mmu) + 1, cycles) // pop return address
+            (self.pop(mmu), cycles) // pop return address
         } else {
             (self.pc, 8)
         }
